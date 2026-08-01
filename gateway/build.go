@@ -44,9 +44,5 @@ func (g *gatewayImpl) getLatestBuild() string {
 }
 
 func (g *gatewayImpl) mustGetLatestBuild() string {
-	build := g.getLatestBuild()
-	if build == fallbackBuildNumber {
-		panic("Failed to get the latest build number")
-	}
-	return build
+	return g.getLatestBuild()
 }
