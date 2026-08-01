@@ -12,21 +12,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/autocord-org/dmg/config"
-	"github.com/autocord-org/dmg/instance"
 	"github.com/autocord-org/dmg/utils"
 	"github.com/grongor/panicwatch"
-	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func init() {
-	application.RegisterEvent[config.Config]("configUpdate")
-	application.RegisterEvent[instance.View]("instanceUpdate")
-	application.RegisterEvent[utils.LogEvent]("log")
 	redirectStderr()
 }
 
@@ -122,11 +115,24 @@ func main() {
 	}
 
 	cli := flag.Bool("cli", false, "enable CLI mode")
+	web := flag.Bool("web", false, "run as web server dashboard")
 	flag.Parse()
 
 	utils.SetCliMode(func() bool {
-		return *cli
+		return *cli || *web
 	})
+
+	if *web {
+		// Web-server mode: serve the Svelte dashboard over HTTP and push
+		// real-time events to connected browsers via SSE.
+		utils.SetWebMode()
+		utils.SetWebEventEmitter(func(eventName string, args ...interface{}) {
+			eventHub.broadcast(eventName, args...)
+		})
+		dmgService.startup()
+		startWebServer(dmgService, assets)
+		return
+	}
 
 	if *cli {
 		dmgService.startup()
@@ -136,44 +142,12 @@ func main() {
 		return
 	}
 
-	app := application.New(application.Options{
-		Name: "Dank Memer Grinder",
-		Assets: application.AssetOptions{
-			Handler:        application.AssetFileServerFS(assets),
-			DisableLogging: true,
-		},
-		Logger:   nil,
-		LogLevel: slog.LevelWarn,
-		Services: []application.Service{
-			application.NewService(dmgService),
-		},
-		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
-		},
-		Linux: application.LinuxOptions{
-			ProgramName: "Dank Memer Grinder"},
+	// Neither -web nor -cli flag: default to web mode so the binary works
+	// out-of-the-box on Replit (no display available).
+	utils.SetWebMode()
+	utils.SetWebEventEmitter(func(eventName string, args ...interface{}) {
+		eventHub.broadcast(eventName, args...)
 	})
-
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:         "Dank Memer Grinder",
-		Width:         1024,
-		Height:        768,
-		MinWidth:      1024,
-		MinHeight:     768,
-		MaxWidth:      1280,
-		MaxHeight:     800,
-		DisableResize: false,
-		Frameless:     false,
-	})
-
-	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
-		window.SetURL("/#/")
-		dmgService.startup()
-	})
-
-	err = app.Run()
-
-	if err != nil {
-		utils.ShowErrorDialog("A fatal error occurred!", err.Error())
-	}
+	dmgService.startup()
+	startWebServer(dmgService, assets)
 }

@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/autocord-org/dmg/config"
 	"github.com/valyala/fasthttp"
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 var src = rand.NewSource(time.Now().UnixNano())
@@ -119,14 +119,9 @@ func FormatNumber(amount int, decimalPlaces int) string {
 }
 
 func ShowErrorDialog(title, message string) {
-	if !isCliMode() {
-		dialog := application.MessageDialog{MessageDialogOptions: application.MessageDialogOptions{
-			DialogType: application.ErrorDialogType,
-			Title:      title,
-			Message:    message,
-		}}
-		dialog.Show()
-	}
+	// In web-server mode there is no GUI dialog; log the error and panic so
+	// the process exits cleanly with a visible message.
+	slog.Error(title, "message", message)
 	panic(message)
 }
 
@@ -196,13 +191,32 @@ func GetAccountNumber(token string) string {
 }
 
 var isCliMode = func() bool { return false }
+var webEventEmitter func(string, ...interface{})
+var webModeEnabled bool
 
 func SetCliMode(checker func() bool) {
 	isCliMode = checker
 }
 
+// SetWebMode marks the app as running in headless web-server mode.
+// In this mode Wails GUI calls are skipped; events go through SetWebEventEmitter.
+func SetWebMode() {
+	webModeEnabled = true
+}
+
+// IsWebMode returns true when running as a web server (no Wails GUI).
+func IsWebMode() bool {
+	return webModeEnabled
+}
+
+// SetWebEventEmitter registers a function that receives emitted events and
+// forwards them to connected browser clients via SSE.
+func SetWebEventEmitter(fn func(string, ...interface{})) {
+	webEventEmitter = fn
+}
+
 func EmitEventIfNotCLI(eventName string, args ...interface{}) {
-	if !isCliMode() {
-		application.Get().Event.Emit(eventName, args...)
+	if webEventEmitter != nil {
+		webEventEmitter(eventName, args...)
 	}
 }

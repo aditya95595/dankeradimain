@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/wailsapp/wails/v3/pkg/application"
 	"io"
 	"os"
 	"sync"
-	"time"
 
 	"dario.cat/mergo"
 	"github.com/autocord-org/dmg/config"
@@ -132,13 +130,13 @@ func (d *DmgService) UpdateDiscordStatus(status types.OnlineStatus) {
 	}
 }
 
+// CheckForUpdates checks if a newer version is available and emits an event
+// so the browser dashboard can display the update page.
 func (d *DmgService) CheckForUpdates() bool {
 	currentVersion := "v2.0.0-alpha14"
 	newVersion, changes := utils.CheckForUpdates(currentVersion)
 
 	if newVersion != "" && newVersion != currentVersion {
-		application.Get().Window.Current().SetURL("/#/update")
-		time.Sleep(500 * time.Millisecond)
 		utils.EmitEventIfNotCLI("updateChanges", currentVersion, newVersion, changes)
 		return true
 	}
@@ -146,18 +144,12 @@ func (d *DmgService) CheckForUpdates() bool {
 	return false
 }
 
+// Update downloads and applies the latest binary. Not supported in web mode
+// (Replit manages the process); it logs a message instead.
 func (d *DmgService) Update() {
-	if application.Get().Env.Info().Debug {
-		utils.EmitEventIfNotCLI("updateFailed", "Debug environment detected. Update using git instead.")
-		return
-	}
-
-	err := utils.DownloadUpdate()
-	if err != nil {
-		utils.Log(utils.Important, utils.Error, "", fmt.Sprintf("Failed to download update: %s", err.Error()))
-		utils.EmitEventIfNotCLI("updateFailed", err.Error())
-		return
-	}
+	utils.Log(utils.Important, utils.Info, "",
+		"Auto-update is not supported in web mode. Pull the latest code and restart.")
+	utils.EmitEventIfNotCLI("updateFailed", "Auto-update unavailable in web mode. Please restart the server with the latest code.")
 }
 
 func downloadDefaultConfig() (config.Config, error) {
