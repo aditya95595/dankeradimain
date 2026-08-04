@@ -106,8 +106,10 @@ func main() {
 				"stack", p.Stack)
 		},
 		OnWatcherDied: func(err error) {
-			slog.Error("panicwatch watcher process died")
-			os.Exit(1)
+			// In containerised environments (e.g. Replit) the watcher child
+			// process can be reaped by the container runtime. Log the event
+			// but do NOT exit — the main server must keep running.
+			slog.Error("panicwatch watcher process died", "error", err)
 		},
 	})
 	if err != nil {

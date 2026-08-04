@@ -7,8 +7,9 @@ channel = "stable-25_05"
 expertMode = true
 
 [deployment]
-run = ["sh", "-c", "/nix/store/a90l6nxkqdlqxzgz5j958rz5gwygbamc-go-1.21.13/bin/go run $REPL_HOME"]
+run = ["./dmg-web"]
 deploymentTarget = "cloudrun"
+build = ["bash", "-c", "cd frontend && bun run build && cd .. && go build -o dmg-web ."]
 
 [workflows]
 runButton = "Project"

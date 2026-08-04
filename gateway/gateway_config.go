@@ -10,7 +10,10 @@ import (
 func DefaultConfig() *Config {
 	cfg, err := utils.ReadConfig()
 	if err != nil {
-		panic(fmt.Sprintf("Failed to read config file: %s", err.Error()))
+		// In web/server mode config may not exist yet; use a safe default
+		// presence rather than crashing the whole process.
+		utils.Log(utils.Important, utils.Error, "", fmt.Sprintf("DefaultConfig: could not read config, using defaults: %s", err.Error()))
+		cfg = utils.DefaultConfigValues()
 	}
 
 	presence := MessageDataPresenceUpdate{
