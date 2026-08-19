@@ -7,8 +7,8 @@ channel = "stable-25_05"
 expertMode = true
 
 [deployment]
-run = ["./dmg-web"]
-deploymentTarget = "cloudrun"
+run = ["bash", "-c", "cd frontend && bun run build && cd .. && GOTOOLCHAIN=local go build -o dmg-web . && exec ./dmg-web"]
+deploymentTarget = "vm"
 build = ["bash", "-c", "cd frontend && bun run build && cd .. && go build -o dmg-web ."]
 
 [workflows]
