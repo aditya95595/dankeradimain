@@ -14,7 +14,7 @@ import {
 	UpdateConfig
 } from "@/bindings/github.com/autocord-org/dmg/dmgservice";
 import { Browser } from "@wailsio/runtime";
-import { OnlineStatus } from "@/bindings/github.com/autocord-org/dmg/discord/types";
+import type { OnlineStatus } from "@/bindings/github.com/autocord-org/dmg/discord/types";
 import type { View } from "@/bindings/github.com/autocord-org/dmg/instance";
 
 (window as any).Browser = Browser;
