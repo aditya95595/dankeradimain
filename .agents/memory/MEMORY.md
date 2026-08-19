@@ -1,0 +1,1 @@
+- [Go publish toolchain compatibility](go-publish-toolchain.md) — production builds cannot rely on automatic Go toolchain downloads.

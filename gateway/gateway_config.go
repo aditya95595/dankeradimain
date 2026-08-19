@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"github.com/autocord-org/dmg/config"
 	"github.com/autocord-org/dmg/utils"
 	"github.com/fasthttp/websocket"
 )
@@ -13,7 +14,7 @@ func DefaultConfig() *Config {
 		// In web/server mode config may not exist yet; use a safe default
 		// presence rather than crashing the whole process.
 		utils.Log(utils.Important, utils.Error, "", fmt.Sprintf("DefaultConfig: could not read config, using defaults: %s", err.Error()))
-		cfg = utils.DefaultConfigValues()
+		cfg = config.Config{}
 	}
 
 	presence := MessageDataPresenceUpdate{

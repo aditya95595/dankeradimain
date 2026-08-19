@@ -116,9 +116,16 @@ func shouldExecuteCommand(in *Instance, command string) bool {
 		return !in.Cfg.Commands.Blackjack.ManuallyRunCommands
 	case "Profile":
 		val := reflect.ValueOf(in.Cfg.AutoUse)
+		if val.Kind() != reflect.Struct {
+			return false
+		}
 		for i := 0; i < val.NumField(); i++ {
-			if val.Field(i).FieldByName("State").Bool() {
-				return true
+			field := val.Field(i)
+			if field.Kind() == reflect.Struct {
+				state := field.FieldByName("State")
+				if state.IsValid() && state.Kind() == reflect.Bool && state.Bool() {
+					return true
+				}
 			}
 		}
 		return false
