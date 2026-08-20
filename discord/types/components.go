@@ -67,7 +67,7 @@ func (umc *unmarshalableMessageComponent) UnmarshalJSON(src []byte) error {
 	case TextInputComponent:
 		umc.MessageComponent = &TextInput{}
 	default:
-		umc.MessageComponent = rawMessageComponent{
+		umc.MessageComponent = &rawMessageComponent{
 			raw:       append(json.RawMessage(nil), src...),
 			component: v.Type,
 		}
