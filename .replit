@@ -7,7 +7,7 @@ channel = "stable-25_05"
 expertMode = true
 
 [deployment]
-run = ["bash", "-c", "set -e; cd frontend; bun run build; cd ..; GOTOOLCHAIN=local go build -o dmg-web .; exec ./dmg-web"]
+run = ["./dmg-web"]
 deploymentTarget = "vm"
 build = ["bash", "-c", "cd frontend && bun run build && cd .. && GOTOOLCHAIN=local go build -o dmg-web ."]
 
