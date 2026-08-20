@@ -26,6 +26,22 @@ type MessageComponent interface {
 	Type() ComponentType
 }
 
+// rawMessageComponent preserves Discord component types that this client does
+// not yet model (for example type 17 containers). Unknown components must not
+// make an otherwise valid gateway event fail to decode.
+type rawMessageComponent struct {
+	raw       json.RawMessage
+	component ComponentType
+}
+
+func (c rawMessageComponent) MarshalJSON() ([]byte, error) {
+	return c.raw, nil
+}
+
+func (c rawMessageComponent) Type() ComponentType {
+	return c.component
+}
+
 type unmarshalableMessageComponent struct {
 	MessageComponent
 }
@@ -51,7 +67,10 @@ func (umc *unmarshalableMessageComponent) UnmarshalJSON(src []byte) error {
 	case TextInputComponent:
 		umc.MessageComponent = &TextInput{}
 	default:
-		return fmt.Errorf("unknown component type: %d", v.Type)
+		umc.MessageComponent = rawMessageComponent{
+			raw:       append(json.RawMessage(nil), src...),
+			component: v.Type,
+		}
 	}
 	return json.Unmarshal(src, umc.MessageComponent)
 }
