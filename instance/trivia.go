@@ -25,7 +25,14 @@ func init() {
 }
 
 func (in *Instance) Trivia(message gateway.EventMessage) {
-	buttons := message.Components[0].(*types.ActionsRow).Components
+	buttons := make([]types.MessageComponent, 0)
+	for _, component := range message.Components {
+		collectTriviaButtons(component, &buttons)
+	}
+	if len(buttons) == 0 || len(message.Embeds) == 0 {
+		utils.Log(utils.Others, utils.Warn, in.SafeGetUsername(), "Trivia message had no usable buttons or embed")
+		return
+	}
 	embed := message.Embeds[0]
 
 	category := embed.Fields[1].Value
@@ -45,10 +52,26 @@ func (in *Instance) Trivia(message gateway.EventMessage) {
 	in.clickButtonBasedOnCondition(buttons, message, answer.(string), condition)
 }
 
+func collectTriviaButtons(component types.MessageComponent, buttons *[]types.MessageComponent) {
+	switch value := component.(type) {
+	case *types.Button:
+		*buttons = append(*buttons, value)
+	case *types.ActionsRow:
+		for _, child := range value.Components {
+			collectTriviaButtons(child, buttons)
+		}
+	case *types.Container:
+		for _, child := range value.Components {
+			collectTriviaButtons(child, buttons)
+		}
+	}
+}
+
 func (in *Instance) clickButtonBasedOnCondition(buttons []types.MessageComponent, message gateway.EventMessage, answer string, condition bool) {
 	buttonIndices := make([]int, 0)
 	for i, button := range buttons {
-		if button.(*types.Button).Label == answer == condition {
+		typedButton, ok := button.(*types.Button)
+		if ok && typedButton.Label == answer == condition {
 			buttonIndices = append(buttonIndices, i)
 		}
 	}
