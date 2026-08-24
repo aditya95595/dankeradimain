@@ -7,7 +7,7 @@ channel = "stable-25_05"
 expertMode = true
 
 [deployment]
-run = ["./dmg-web"]
+run = ["bash", "-c", "set -e; GOTOOLCHAIN=local go build -o dmg-web .; exec ./dmg-web"]
 deploymentTarget = "autoscale"
 build = ["bash", "-c", "cd frontend && bun run build && cd .. && GOTOOLCHAIN=local go build -o dmg-web ."]
 
