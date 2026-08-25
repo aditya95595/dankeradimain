@@ -18,7 +18,6 @@ const (
 	RoleSelectMenuComponent        ComponentType = 6
 	MentionableSelectMenuComponent ComponentType = 7
 	ChannelSelectMenuComponent     ComponentType = 8
-	ContainerComponent             ComponentType = 17
 )
 
 // MessageComponent is a base interface for all message components.
@@ -67,8 +66,6 @@ func (umc *unmarshalableMessageComponent) UnmarshalJSON(src []byte) error {
 		umc.MessageComponent = &SelectMenu{}
 	case TextInputComponent:
 		umc.MessageComponent = &TextInput{}
-	case ContainerComponent:
-		umc.MessageComponent = &Container{}
 	default:
 		umc.MessageComponent = &rawMessageComponent{
 			raw:       append(json.RawMessage(nil), src...),
@@ -76,38 +73,6 @@ func (umc *unmarshalableMessageComponent) UnmarshalJSON(src []byte) error {
 		}
 	}
 	return json.Unmarshal(src, umc.MessageComponent)
-}
-
-// Container represents Discord's newer type-17 component wrapper.
-// Its children may include action rows, buttons, and display-only components.
-type Container struct {
-	Components []MessageComponent `json:"components"`
-}
-
-func (c Container) Type() ComponentType {
-	return ContainerComponent
-}
-
-func (c Container) MarshalJSON() ([]byte, error) {
-	type container Container
-	return json.Marshal(struct {
-		container
-		Type ComponentType `json:"type"`
-	}{container: container(c), Type: c.Type()})
-}
-
-func (c *Container) UnmarshalJSON(data []byte) error {
-	var raw struct {
-		Components []unmarshalableMessageComponent `json:"components"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	c.Components = make([]MessageComponent, len(raw.Components))
-	for i := range raw.Components {
-		c.Components[i] = raw.Components[i].MessageComponent
-	}
-	return nil
 }
 
 // MessageComponentFromJSON is a helper function for unmarshaling message components
