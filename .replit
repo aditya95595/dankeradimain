@@ -37,3 +37,6 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[objectStorage]
+defaultBucketID = "replit-objstore-bc6407a2-065d-4e9e-80a9-9033692599b0"
