@@ -1,30 +1,4 @@
-<br>
 
-<div align="center">
-  <img src=".github/assets/img/icon.png" width="100">
-
-  # [![Typing SVG](https://readme-typing-svg.herokuapp.com?font=Permanent+Marker&size=40&pause=1000&color=598e3c&center=true&vCenter=true&width=435&lines=Dank+Memer+Grinder)](https://git.io/typing-svg)
-
-  ### Supercharge your [Dank Memer](https://dankmemer.lol/) experience
-  <a href="#features">Features</a>
-  ·
-  <a href="https://dankmemer.tools/download">Download</a>
-  ·
-  <a href="https://docs.dankmemer.tools/">Documentation</a>
-  ·
-  <a href="https://dankmemer.tools/">Website</a>
-
-  ![GitHub License](https://img.shields.io/github/license/autocord-org/dmg?style=for-the-badge&color=%2322c55e)
-  ![GitHub Release](https://img.shields.io/github/v/release/autocord-org/dmg?include_prereleases&sort=semver&style=for-the-badge)
-  ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/autocord-org/dmg/total?style=for-the-badge&color=%2322c55e)
-
-  [![Discord Server Invite](https://invidget.switchblade.xyz/KTrmQnhCHb)](https://discord.gg/KTrmQnhCHb)
-  
-  <a href="https://www.buymeacoffee.com/bridgesense"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=bridgesense&button_colour=199532&font_colour=ffffff&font_family=Arial&outline_colour=ffffff&coffee_colour=FFDD00" /></a>
-</div>
-
-> 🚨 WARNING: USE AT YOUR OWN RISK. This is a self-bot and is in violation of Discord's and Dank Memer's rules and TOS. By using this software, you acknowledge that we take no responsibility for any action taken against your account, whether by Discord or Dank Memer.
->
 > It is crucial that you take appropriate measures to avoid detection. These measures include:
 > <ol>
 >  <li>Running the bot only in private channels.</li>
