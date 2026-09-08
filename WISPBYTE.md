@@ -7,18 +7,26 @@ Free tier notes (as of 2026):
 - Log in to [wispbyte.com/client](https://wispbyte.com/client) about every **2 weeks**
 - **One Discord connection per server** (do not stack many accounts on free tier)
 
-## 1. Prepare config locally
+## Secrets (recommended)
+
+In Wispbyte **Startup → Environment variables / Secrets**, set:
+
+| Name | Required | Description |
+|------|----------|-------------|
+| `DISCORD_TOKEN` | Yes | Your Discord **user** token (or use `TOKEN`) |
+| `CHANNEL_ID` | Yes | Channel ID where Dank Memer is used |
+| `API_KEY` | No | Captcha solver API key |
+| `PORT` | Auto | Usually set by Wispbyte — do not override unless needed |
+
+The bot reads these on startup and injects them into the first account. You can leave `accounts: []` empty in `config.json`.
+
+## 1. Prepare config (no secrets in the file)
 
 ```bash
 cp config.example.json config.json
 ```
 
-Edit `config.json`:
-- Set `state` to `true`
-- Under `accounts`, add your Discord **user token** and **channel ID**
-- Fishing is already enabled (`commands.fish.state` + `fishOnly`)
-
-Never commit real tokens to GitHub.
+Keep fishing enabled (`commands.fish.state` + `fishOnly`). Leave token/channel empty if using secrets.
 
 ## 2. Get a Linux binary
 
@@ -30,57 +38,49 @@ cd dankeradimain
 go build -mod=vendor -o dmg-web .
 ```
 
-Or use the repo’s existing `dmg-web` if it is already a Linux amd64 build.
+Rebuild after pulling so env-secret support is included.
 
 ## 3. Create a Wispbyte server
 
 1. Sign in at https://wispbyte.com/client  
 2. **Create Server** → Free Plan  
 3. Pick any available image (Node/Python is fine if you only run the binary)  
-4. Open **Files** and upload:
-   - `dmg-web` (Linux binary)
-   - `config.json` (with your token)
-   - `start-wispbyte.sh` (optional)
-   - `frontend/dist/` is already embedded in a full rebuild; binary alone is enough if built with embed
+4. **Files** → upload `dmg-web` + `config.json` (+ optional `start-wispbyte.sh`)  
+5. **Startup** → add secrets listed above  
 
-## 4. Startup settings
-
-Open **Startup** and set:
-
-**Startup command:**
-
-```bash
-chmod +x dmg-web start-wispbyte.sh 2>/dev/null; ./start-wispbyte.sh
-```
-
-or simply:
+## 4. Startup command
 
 ```bash
 chmod +x dmg-web && ./dmg-web
 ```
 
-The app reads **`PORT`** automatically (Wispbyte sets this). Health check: `/health`.
+or:
+
+```bash
+chmod +x dmg-web start-wispbyte.sh 2>/dev/null; ./start-wispbyte.sh
+```
+
+Health check path: `/health`
 
 ## 5. Start and verify
 
-1. Click **Start** in Console  
-2. Watch logs for `Logged in as ...` and fishing activity  
-3. Open the dashboard URL shown by Wispbyte (host:port) if you want the simple UI  
+1. **Start** the server  
+2. Console should log that secrets were applied, then `Logged in as ...`  
+3. Fishing should begin in the configured channel  
 
 ## 24/7 tips
 
-- Use **one account** on free tier (RAM/CPU limits).
-- Keep `fishOnly: true` so other commands stay off.
-- Optional breaks in config reduce ban risk; leave them on for safer long runs.
-- Log into the Wispbyte panel every ~14 days on free tier.
-- Private channel only; selfbots violate Discord ToS — use at your own risk.
+- One account on free tier  
+- `fishOnly: true`  
+- Log into the panel every ~14 days on free tier  
+- Private channel only; selfbots violate Discord ToS — use at your own risk  
 
-## If it crashes
+## Troubleshooting
 
 | Symptom | Fix |
 |--------|-----|
-| `Permission denied` | `chmod +x dmg-web` |
-| Wrong architecture | Rebuild on Linux amd64 |
-| Port in use / not binding | Ensure binary includes PORT support (latest `web_server.go`) |
-| Invalid token | Fix token in `config.json` |
-| OOM / killed | Use 1 account only; upgrade plan if needed |
+| Permission denied | `chmod +x dmg-web` |
+| Wrong arch | Rebuild Linux amd64 |
+| Invalid token | Check `DISCORD_TOKEN` / `TOKEN` secret |
+| No channel | Set `CHANNEL_ID` secret |
+| OOM | One account only; upgrade plan |
