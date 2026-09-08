@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 
 	"dario.cat/mergo"
@@ -57,6 +58,8 @@ func (d *DmgService) startup() {
 		}
 	}
 
+	applyEnvSecrets(&userCfg)
+
 	if err = userCfg.Validate(); err != nil {
 		utils.ShowErrorDialog("A fatal error occurred!",
 			fmt.Sprintf("Invalid config.json: %s", err.Error()))
@@ -67,6 +70,53 @@ func (d *DmgService) startup() {
 	d.cfg = &userCfg
 	d.CheckForUpdates()
 	d.StartInstances()
+}
+
+// applyEnvSecrets injects Wispbyte/host secrets from environment variables.
+// Supported:
+//   DISCORD_TOKEN or TOKEN  - Discord user token
+//   CHANNEL_ID              - target channel ID
+//   API_KEY                 - optional captcha solver API key
+func applyEnvSecrets(cfg *config.Config) {
+	token := firstNonEmpty(os.Getenv("DISCORD_TOKEN"), os.Getenv("TOKEN"))
+	channelID := strings.TrimSpace(os.Getenv("CHANNEL_ID"))
+	apiKey := strings.TrimSpace(os.Getenv("API_KEY"))
+
+	if apiKey != "" {
+		cfg.ApiKey = apiKey
+	}
+
+	if token == "" {
+		return
+	}
+
+	// Prefer env secrets: replace or create first account entry
+	if len(cfg.Accounts) == 0 {
+		cfg.Accounts = []config.AccountsConfig{{
+			Token:     token,
+			ChannelID: channelID,
+			State:     true,
+		}}
+		utils.Log(utils.Important, utils.Info, "", "Loaded Discord account from environment secrets")
+		return
+	}
+
+	cfg.Accounts[0].Token = token
+	if channelID != "" {
+		cfg.Accounts[0].ChannelID = channelID
+	}
+	cfg.Accounts[0].State = true
+	utils.Log(utils.Important, utils.Info, "", "Applied Discord token/channel from environment secrets")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (d *DmgService) GetConfig() *config.Config {
@@ -130,8 +180,6 @@ func (d *DmgService) UpdateDiscordStatus(status types.OnlineStatus) {
 	}
 }
 
-// CheckForUpdates checks if a newer version is available and emits an event
-// so the browser dashboard can display the update page.
 func (d *DmgService) CheckForUpdates() bool {
 	currentVersion := "v2.0.0-alpha14"
 	newVersion, changes := utils.CheckForUpdates(currentVersion)
@@ -144,8 +192,6 @@ func (d *DmgService) CheckForUpdates() bool {
 	return false
 }
 
-// Update downloads and applies the latest binary. Not supported in web mode
-// (Replit manages the process); it logs a message instead.
 func (d *DmgService) Update() {
 	utils.Log(utils.Important, utils.Info, "",
 		"Auto-update is not supported in web mode. Pull the latest code and restart.")
