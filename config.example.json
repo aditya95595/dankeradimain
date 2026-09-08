@@ -1,5 +1,5 @@
 {
-  "state": false,
+  "state": true,
   "apiKey": "",
   "gui": {
     "theme": "system"
@@ -36,11 +36,11 @@
   "accounts": [],
   "autoBuy": {
     "huntingRifle": {
-      "state": true,
+      "state": false,
       "amount": 1
     },
     "shovel": {
-      "state": true,
+      "state": false,
       "amount": 1
     },
     "lifeSavers": {
@@ -109,7 +109,7 @@
       "delay": 30
     },
     "fish": {
-      "state": false,
+      "state": true,
       "delay": 30,
       "fishOnly": true,
       "fishOnlyDelay": {
@@ -118,6 +118,7 @@
       },
       "autoCompleteTasks": true,
       "autoCompleteTradeOffers": false,
+      "autoEquipment": true,
       "sellCoinsValue": 100000,
       "fishLocation": [
         "Underwater Sanctuary",
