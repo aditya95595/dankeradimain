@@ -71,22 +71,25 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 
 		// Check location
 		if len(embed.Fields) > 1 {
-			currentLocation := strings.TrimSpace(strings.SplitN(embed.Fields[1].Value, ">", 2)[1])
-			locationValid := false
-			for _, loc := range in.Cfg.Commands.Fish.FishLocation {
-				if currentLocation == string(loc) {
-					locationValid = true
-					break
+			parts := strings.SplitN(embed.Fields[1].Value, ">", 2)
+			if len(parts) > 1 {
+				currentLocation := strings.TrimSpace(parts[1])
+				locationValid := false
+				for _, loc := range in.Cfg.Commands.Fish.FishLocation {
+					if currentLocation == string(loc) {
+						locationValid = true
+						break
+					}
 				}
-			}
 
-			if !locationValid {
-				err := in.ClickButton(message, 0, 1)
-				if err != nil {
-					utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(),
-						fmt.Sprintf("Failed to click fish location button: %s", err.Error()))
+				if !locationValid {
+					err := in.ClickButton(message, 0, 1)
+					if err != nil {
+						utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(),
+							fmt.Sprintf("Failed to click fish location button: %s", err.Error()))
+					}
+					return
 				}
-				return
 			}
 		}
 
@@ -111,7 +114,6 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 
 		// Check if equipment available, if not already tried to buy equipment in past 5 minutes
 		if in.Cfg.Commands.Fish.AutoEquipment && len(embed.Fields) > 0 && strings.Contains(embed.Fields[0].Value, "Bare Hand") && !(!autoBuySuccess && lastAutoBuy.Add(5*time.Minute).After(time.Now())) {
-			// Avoid hold tight error
 			<-utils.Sleep(utils.RandSeconds(2, 5))
 
 			err := in.ClickButton(message, 0, 0)
@@ -127,7 +129,6 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 			utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed to click go fishing button: %s", err.Error()))
 		}
 	} else if embed.Title == "Viewing Bucket Slots" {
-		// Click empty buckets if buckets full
 		re := regexp.MustCompile(`All Buckets Space:[\s\S]*?(\d+)\s*/\s*(\d+)`)
 		matches := re.FindStringSubmatch(embed.Description)
 
@@ -179,13 +180,10 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 			}
 		}
 
-		// Dont autobuy equipment again if last autobuy less than 5 minutes ago
 		if lastAutoBuy.Add(5 * time.Minute).After(time.Now()) {
 			return
 		}
 
-		// No better equipment available, buy fishing rod
-		// Make sure fish doesn't run again too soon
 		in.LastRan["Fish"] = time.Now()
 		in.setAutoBuyState(2, 1, "fishingrodtool", 20)
 		resultChan := in.StartAutoBuy("fish", "shop")
@@ -196,7 +194,6 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 				utils.Log(utils.Others, utils.Info, in.SafeGetUsername(), result.Message)
 				lastAutoBuy = time.Now()
 
-				// Avoid hold tight error
 				<-utils.Sleep(utils.RandSeconds(2, 5))
 
 				if result.Success {
@@ -215,7 +212,6 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 				utils.Log(utils.Others, utils.Info, in.SafeGetUsername(), "Fish shop autobuy timed out")
 				lastAutoBuy = time.Now()
 
-				// Avoid hold tight error
 				<-utils.Sleep(utils.RandSeconds(2, 5))
 
 				in.UnpauseCommands()
@@ -231,12 +227,10 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 				utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed to send fish buckets command: %s", err.Error()))
 			}
 
-			// Send new fish command 50% of the time
 			if in.Cfg.Commands.Fish.FishOnly && utils.Rng.Intn(2) == 0 {
 				return
 			}
 		} else if len(message.Embeds) > 1 && strings.Contains(message.Embeds[1].Description, "Bare Hand") {
-			// Avoid hold tight error
 			<-utils.Sleep(utils.RandSeconds(2, 5))
 			err := in.ClickButton(message, 0, 0)
 			if err != nil {
@@ -246,43 +240,61 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 		}
 
 		if in.Cfg.Commands.Fish.FishOnly {
+			// Block CommandsLoop from firing another /fish while we wait for cooldown + fish-again click
 			in.LastRan["Fish"] = time.Now().Add(time.Minute)
 
-			re := regexp.MustCompile(`<t:(\d+):R>`)
+			// Dank Memer shows remaining cooldown as Discord timestamp <t:UNIX:R>
+			// Typical fish cooldown is ~8-10 seconds; we wait until that time + small random buffer.
+			var wait time.Duration
+			re := regexp.MustCompile(`<t:(\d+):[a-zA-Z]>`)
 			matches := re.FindStringSubmatch(embed.Description)
-			if len(matches) < 2 {
-				utils.Log(utils.Important, utils.Error, in.SafeGetUsername(), "Failed to find fish timestamp")
-				return
+			if len(matches) >= 2 {
+				ts, err := strconv.ParseInt(matches[1], 10, 64)
+				if err == nil {
+					remaining := time.Unix(ts, 0).Sub(time.Now())
+					if remaining < 0 {
+						remaining = 0
+					}
+					wait = remaining + utils.RandSeconds(in.Cfg.Commands.Fish.FishOnlyDelay.MinSeconds, in.Cfg.Commands.Fish.FishOnlyDelay.MaxSeconds)
+				}
 			}
 
-			ts, err := strconv.ParseInt(matches[1], 10, 64)
-			if err != nil {
-				utils.Log(utils.Important, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed to parse fish timestamp: %s", err.Error()))
-				return
+			// Fallback if no timestamp in embed: use typical 8-10s fish cooldown + buffer
+			if wait == 0 {
+				utils.Log(utils.Discord, utils.Info, in.SafeGetUsername(), "No fish cooldown timestamp found; waiting 8-12s")
+				wait = utils.RandSeconds(8, 12)
 			}
 
-			cooldown := time.Duration(ts-time.Now().Unix()) * time.Second
-
-			<-utils.Sleep(cooldown + utils.RandSeconds(in.Cfg.Commands.Fish.FishOnlyDelay.MinSeconds, in.Cfg.Commands.Fish.FishOnlyDelay.MaxSeconds))
+			utils.Log(utils.Discord, utils.Info, in.SafeGetUsername(), fmt.Sprintf("Fish cooldown wait: %v", wait.Round(time.Millisecond)))
+			<-utils.Sleep(wait)
 
 			if in.IsPaused() {
 				return
 			}
 
-			err = in.ClickButton(message, 0, 1)
+			// Prefer "Fish again" style button (usually column 1); try nearby columns if needed
+			err := in.ClickButton(message, 0, 1)
 			if err != nil {
-				utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed to click fish again button: %s", err.Error()))
+				for col := 0; col < 4; col++ {
+					if col == 1 {
+						continue
+					}
+					err = in.ClickButton(message, 0, col)
+					if err == nil {
+						break
+					}
+				}
+				if err != nil {
+					utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed to click fish again button: %s", err.Error()))
+				}
 			}
 		} else {
 			in.UnpauseCommands()
 		}
 	} else if embed.Image != nil && strings.Contains(embed.Image.URL, "catch.webp") {
-		// New Dank Memer minigame: simply click the fish spot.
-		// Old pathfinding logic is kept as fallback if image hashes still match.
 		img, err := in.downloadAndDecodeImage(embed.Image.URL)
 		if err != nil {
 			utils.Log(utils.Important, utils.Error, in.SafeGetUsername(), err.Error())
-			// Fallback: try clicking middle button if image fails
 			_ = in.ClickButton(message, 0, 2)
 			return
 		}
@@ -290,7 +302,6 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 		cellWidth, cellHeight := img.Bounds().Dx()/gridSize, img.Bounds().Dy()/gridSize
 		in.handleCatchUpdate(img, cellWidth, cellHeight, message)
 	} else if embed.Title == "Selling Creatures" {
-		// Choose between coins / tokens
 		if len(message.Components) > 0 && len(message.Components[0].(*types.ActionsRow).Components) > 2 {
 			buttonLabel := message.Components[0].(*types.ActionsRow).Components[1].(*types.Button).Label
 			coins, _ := strconv.Atoi(strings.ReplaceAll(regexp.MustCompile(`(\d+(?:\.\d+)?)[kKmM]?`).FindStringSubmatch(strings.ReplaceAll(buttonLabel, ",", ""))[1], ".", ""))
@@ -319,13 +330,11 @@ func (in *Instance) FishMessageUpdate(message gateway.EventMessage) {
 		for _, option := range options {
 			if option.Label == string(chosenLocation) {
 				if option.Default {
-					// Click travel to button
 					err := in.ClickButton(message, 1, 1)
 					if err != nil {
 						utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed to click travel to button: %s", err.Error()))
 					}
 				} else {
-					// Change location select menu
 					err := in.ChooseSelectMenu(message, 0, 0, []string{option.Value})
 					if err != nil {
 						utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed to choose fish location: %s", err.Error()))
@@ -369,8 +378,6 @@ func (in *Instance) downloadAndDecodeImage(url string) (image.Image, error) {
 func (in *Instance) handleCatchUpdate(img image.Image, cellWidth, cellHeight int, message gateway.EventMessage) {
 	bombPositions, fishPosition, hookPosition := findPositions(img, cellWidth, cellHeight)
 
-	// If we can't find the fish with image hashes (common after Dank Memer updates),
-	// fall back to clicking a random non-disabled button in the first row.
 	if fishPosition == nil {
 		utils.Log(utils.Discord, utils.Info, in.SafeGetUsername(), "Fish position not detected by hash, using fallback click")
 		for col := 0; col < 5; col++ {
@@ -385,7 +392,6 @@ func (in *Instance) handleCatchUpdate(img image.Image, cellWidth, cellHeight int
 	grid := initializeGrid(bombPositions, *fishPosition)
 	path := findPath(grid, hookPosition, *fishPosition)
 	if path == nil || len(path) < 2 {
-		// Pathfinding failed - just try to click the fish position button
 		err := in.ClickButton(message, 0, 2)
 		if err != nil {
 			utils.Log(utils.Discord, utils.Error, in.SafeGetUsername(), fmt.Sprintf("Failed fallback catch click: %s", err.Error()))
