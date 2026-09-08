@@ -3,14 +3,14 @@ package instance
 import (
 	"context"
 	"fmt"
-	"github.com/autocord-org/dmg/gateway"
-	"github.com/autocord-org/dmg/utils"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/autocord-org/dmg/config"
 	"github.com/autocord-org/dmg/discord/types"
+	"github.com/autocord-org/dmg/gateway"
+	"github.com/autocord-org/dmg/utils"
 )
 
 type Client interface {
@@ -97,9 +97,8 @@ func (in *Instance) GetView() *View {
 func (in *Instance) SafeGetUsername() string {
 	if in.User != nil {
 		return in.User.Username
-	} else {
-		return utils.GetAccountNumber(in.AccountCfg.Token)
 	}
+	return utils.GetAccountNumber(in.AccountCfg.Token)
 }
 
 func (in *Instance) Start() error {
@@ -222,31 +221,11 @@ func (in *Instance) UpdateConfig(newConfig config.Config) {
 type MessageHandler func(*Instance, gateway.EventMessage)
 
 var messageCreateHandlers = map[string]MessageHandler{
-	"adventure": (*Instance).AdventureMessageCreate,
-	"blackjack": (*Instance).BlackjackMessageCreate,
-	"highlow":   (*Instance).HighLow,
-	"scratch":   (*Instance).ScratchMessageCreate,
-	"crime":     (*Instance).Crime,
-	"fish":      (*Instance).FishMessageCreate,
-	"search":    (*Instance).Search,
-	"stream":    (*Instance).StreamMessageCreate,
-	"trivia":    (*Instance).Trivia,
-	"pets":      (*Instance).PetsMessageCreate,
-	"postmemes": (*Instance).PostMemesMessageCreate,
-	"work":      (*Instance).WorkMessageCreate,
-	"profile":   (*Instance).ProfileMessageCreate,
+	"fish": (*Instance).FishMessageCreate,
 }
 
 var messageUpdateHandlers = map[string]MessageHandler{
-	"adventure": (*Instance).AdventureMessageUpdate,
-	"blackjack": (*Instance).BlackjackMessageUpdate,
-	"fish":      (*Instance).FishMessageUpdate,
-	"scratch":   (*Instance).ScratchMessageUpdate,
-	"stream":    (*Instance).StreamMessageUpdate,
-	"pets":      (*Instance).PetsMessageUpdate,
-	"postmemes": (*Instance).PostMemesMessageUpdate,
-	"work":      (*Instance).WorkMessageUpdate,
-	"profile":   (*Instance).ProfileMessageUpdate,
+	"fish": (*Instance).FishMessageUpdate,
 }
 
 func (in *Instance) shouldHandleMessage(message gateway.EventMessage) bool {
@@ -270,9 +249,8 @@ func (in *Instance) getMessageType(message gateway.EventMessage) string {
 		return "channel"
 	} else if message.GuildID == "" {
 		return "dm"
-	} else {
-		return "global"
 	}
+	return "global"
 }
 
 func (in *Instance) handleInteraction(message gateway.EventMessage, handlers map[string]MessageHandler) {
@@ -291,7 +269,6 @@ func (in *Instance) HandleMessageCreate(message gateway.EventMessage) {
 	}
 
 	if in.shouldHandleMessage(message) {
-		// Apply to both
 		if in.Captcha(message) {
 			return
 		}
@@ -300,10 +277,7 @@ func (in *Instance) HandleMessageCreate(message gateway.EventMessage) {
 
 		if messageType == "channel" {
 			in.handleInteraction(message, messageCreateHandlers)
-			in.MinigamesMessageCreate(message)
 			in.EventsMessageCreate(message)
-		} else if messageType == "dm" {
-			in.AutoUse(message)
 		}
 	}
 }
@@ -316,14 +290,10 @@ func (in *Instance) HandleMessageUpdate(message gateway.EventMessage) {
 			return
 		}
 
-		if in.shouldHandleMessage(message) {
-			// Apply to both
-			in.AutoBuyMessageUpdate(message)
+		in.AutoBuyMessageUpdate(message)
 
-			if messageType == "channel" {
-				in.handleInteraction(message, messageUpdateHandlers)
-				in.MinigamesMessageUpdate(message)
-			}
+		if messageType == "channel" {
+			in.handleInteraction(message, messageUpdateHandlers)
 		}
 	}
 }
