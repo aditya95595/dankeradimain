@@ -107,7 +107,11 @@ func (d *DmgService) StartInstance(account config.AccountsConfig, readyState str
 }
 
 func (d *DmgService) RemoveInstance(token string, restarting bool) {
-	in := d.instances[d.GetIndex(token)]
+	idx := d.GetIndex(token)
+	if idx == -1 {
+		return // token not found, avoid panic
+	}
+	in := d.instances[idx]
 
 	if restarting {
 		in.State = "restarting"
@@ -118,15 +122,19 @@ func (d *DmgService) RemoveInstance(token string, restarting bool) {
 
 	if !restarting {
 		d.instances = append(
-			d.instances[:d.GetIndex(token)],
-			d.instances[d.GetIndex(token)+1:]...,
+			d.instances[:idx],
+			d.instances[idx+1:]...,
 		)
 	}
 }
 
 func (d *DmgService) RestartInstance(token string) *instance.View {
+	idx := d.GetIndex(token)
+	if idx == -1 {
+		return nil
+	}
+	in := d.instances[idx]
 	d.RemoveInstance(token, true)
-	in := d.instances[d.GetIndex(token)]
 
 	d.StartInstance(in.AccountCfg, "ready", time.Now())
 
