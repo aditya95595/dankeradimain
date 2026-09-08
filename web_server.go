@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -128,13 +129,11 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 
 	// ── Per-instance routes: /api/instances/{token} ──────────────────
 	mux.HandleFunc("/api/instances/", withCORS(func(w http.ResponseWriter, r *http.Request) {
-		// Strip prefix to get "{token}" or "{token}/restart"
 		rest := strings.TrimPrefix(r.URL.Path, "/api/instances/")
 		parts := strings.SplitN(rest, "/", 2)
 		token := parts[0]
 
 		if len(parts) == 1 {
-			// DELETE /api/instances/{token}
 			if r.Method != http.MethodDelete {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
@@ -148,7 +147,6 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			return
 		}
 
-		// POST /api/instances/{token}/restart
 		if parts[1] == "restart" && r.Method == http.MethodPost {
 			view := dmgService.RestartInstance(token)
 			writeJSON(w, view)
@@ -158,7 +156,7 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 		http.NotFound(w, r)
 	}))
 
-	// ── Health check (UptimeRobot ping endpoint) ──────────────────────
+	// ── Health check (UptimeRobot / host health probes) ───────────────
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
@@ -172,14 +170,19 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 		mux.Handle("/", http.FileServer(http.FS(distFS)))
 	}
 
-	slog.Info("Web dashboard running", "url", "http://0.0.0.0:5000")
-	slog.Info("UptimeRobot ping URL", "path", "/health")
-	if err := http.ListenAndServe("0.0.0.0:5000", mux); err != nil {
+	// Wispbyte and most hosts inject PORT. Default to 5000 for local/Replit.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "5000"
+	}
+	addr := "0.0.0.0:" + port
+	slog.Info("Web dashboard running", "url", "http://"+addr)
+	slog.Info("Health check", "path", "/health")
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		slog.Error("Web server error", "error", err)
 	}
 }
 
-// withCORS wraps a handler to add CORS headers for browser access.
 func withCORS(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
