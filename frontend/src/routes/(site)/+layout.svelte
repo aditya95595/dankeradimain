@@ -2,11 +2,18 @@
 	import "../../app.css";
 	import Nav from "$lib/components/Nav.svelte";
 	import Header from "$lib/components/Header.svelte";
-	import { page } from "$app/state";
+	import { onMount } from "svelte";
 
 	interface Props { children?: import("svelte").Snippet; }
 	let { children }: Props = $props();
-	const isLogin = $derived(page.url.hash.includes("#/login"));
+	let isLogin = $state(false);
+
+	onMount(() => {
+		const update = () => (isLogin = window.location.hash.includes("#/login"));
+		update();
+		window.addEventListener("hashchange", update);
+		return () => window.removeEventListener("hashchange", update);
+	});
 </script>
 
 <div class="min-h-screen bg-slate-950 text-slate-100 antialiased">
