@@ -17,13 +17,22 @@
 		return Array.isArray(value) ? value : [];
 	}
 
+	let backupCommandsState: Record<string, boolean> = {};
+
 	function toggleFishOnly(value: boolean) {
 		cfg.c.fish.fishOnly = value;
 		if (value) {
 			for (const [key, command] of Object.entries(cfg.c.commands ?? {})) {
-				if (key !== "fish" && command && typeof command === "object") (command as any).state = false;
+				if (key !== "fish" && command && typeof command === "object") {
+					backupCommandsState[key] = (command as any).state;
+					(command as any).state = false;
+				}
 			}
-			cfg.c.fish.state = true;
+		} else {
+			for (const [key, state] of Object.entries(backupCommandsState)) {
+				if (key !== "fish" && cfg.c.commands?.[key]) cfg.c.commands[key].state = state;
+			}
+			backupCommandsState = {};
 		}
 	}
 
@@ -61,7 +70,7 @@
 
 				<div class="mt-4 grid gap-3 sm:grid-cols-2">
 					{#each Object.entries(cmd) as [key, value] (key)}
-						{#if key !== "state" && key !== "delay" && key !== "fishOnlyDelay"}
+						{#if key !== "state" && key !== "fishOnlyDelay"}
 							<div class="space-y-1.5 {Array.isArray(value) ? "sm:col-span-2" : ""}">
 								<label class="text-xs text-slate-500">{label(key)}</label>
 								{#if typeof value === "boolean"}
