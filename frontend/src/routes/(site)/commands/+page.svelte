@@ -40,6 +40,23 @@
 		const value = (event.target as HTMLInputElement).value;
 		command[key] = value.split(",").map((item) => item.trim()).filter(Boolean);
 	}
+
+	function toggleCommand(commandKey: string, value: boolean) {
+		const command = cfg.c.commands[commandKey] as any;
+		command.state = value;
+		if (commandKey === "fish") {
+			if (!value && cfg.c.fish.fishOnly) {
+				toggleFishOnly(false);
+			} else if (value && cfg.c.fish.fishOnly) {
+				for (const [key, item] of Object.entries(cfg.c.commands ?? {})) {
+					if (key !== "fish" && item && typeof item === "object") {
+						backupCommandsState[key] = (item as any).state;
+						(item as any).state = false;
+					}
+				}
+			}
+		}
+	}
 </script>
 
 <div class="space-y-5">
@@ -61,10 +78,7 @@
 					<button
 						class="rounded-full px-3 py-1 text-xs {cmd.state ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-800 text-slate-500"}"
 						disabled={cfg.c.fish?.fishOnly && commandKey.toLowerCase() !== "fish"}
-						onclick={() => {
-							cmd.state = !cmd.state;
-							if (cmd.state && cfg.c.fish?.fishOnly && commandKey.toLowerCase() !== "fish") cmd.state = false;
-						}}
+						onclick={() => toggleCommand(commandKey, !cmd.state)}
 					>{cmd.state ? "Enabled" : "Disabled"}</button>
 				</div>
 
