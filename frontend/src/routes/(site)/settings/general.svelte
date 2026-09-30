@@ -15,12 +15,6 @@
 		}
 	}
 
-	function rangeFields(key: string, min: string, max: string) {
-		return {
-			min: cooldown(key, min),
-			max: cooldown(key, max)
-		};
-	}
 </script>
 
 <div class="grid gap-4 lg:grid-cols-2">
@@ -36,8 +30,6 @@
 		<h3 class="font-semibold">Grind breaks</h3>
 		<p class="mt-1 text-xs text-slate-500">The same break cooldown and duration values used by the original grinder.</p>
 		<div class="mt-5 space-y-4">
-			{@const breakCooldown = rangeFields("breakCooldown", "minHours", "maxHours")}
-			{@const breakDuration = rangeFields("breakDuration", "minHours", "maxHours")}
 			<label class="block text-xs text-slate-400">Grind cooldown (hours)
 				<div class="mt-1 grid grid-cols-2 gap-2">
 					<input class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" min="0" step="0.1" bind:value={cfg.c.cooldowns.breakCooldown.minHours} />
