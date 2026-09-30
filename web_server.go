@@ -70,6 +70,7 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			var view map[string]interface{}
 			_ = json.Unmarshal(raw, &view)
 			view["instanceId"] = instanceID(in.AccountCfg.Token)
+			view["accountIndex"] = accountIndex(dmgService.GetConfig(), in.AccountCfg.Token)
 			if account, ok := view["accountCfg"].(map[string]interface{}); ok {
 				account["token"] = ""
 			}
@@ -326,6 +327,18 @@ func mergeProtectedConfig(current, incoming *config.Config) {
 			incoming.Accounts[i].ChannelID = current.Accounts[i].ChannelID
 		}
 	}
+}
+
+func accountIndex(cfg *config.Config, token string) int {
+	if cfg == nil {
+		return -1
+	}
+	for i, account := range cfg.Accounts {
+		if account.Token == token {
+			return i
+		}
+	}
+	return -1
 }
 
 func instanceID(token string) string {
