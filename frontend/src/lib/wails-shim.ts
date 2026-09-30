@@ -1,75 +1,41 @@
-/**
- * Wails runtime shim for web-server mode.
- *
- * Replaces @wailsio/runtime so the existing Svelte components work unchanged
- * when the app is served as a plain HTTP server instead of a Wails desktop app.
- *
- * Events  → Server-Sent Events (SSE) at /api/events
- * Browser → window.open
- */
-
-type EventHandler = (event: { data: unknown }) => void;
+type EventHandler = (event: { data: any }) => void;
 
 const handlers: Record<string, EventHandler[]> = {};
-
 let eventSource: EventSource | null = null;
+let reconnectTimer: number | undefined;
 
 function connect() {
-  if (eventSource) return;
-
-  eventSource = new EventSource('/api/events');
-
-  eventSource.onmessage = (e: MessageEvent) => {
-    try {
-      const { name, data } = JSON.parse(e.data) as { name: string; data: unknown };
-      const list = handlers[name];
-      if (list) {
-        list.forEach((cb) => cb({ data }));
-      }
-    } catch {
-      // ignore malformed events
-    }
-  };
-
-  eventSource.onerror = () => {
-    // Reconnect after 3 seconds
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-    setTimeout(connect, 3000);
-  };
+	if (typeof window === "undefined" || eventSource) return;
+	eventSource = new EventSource("/api/events");
+	eventSource.onmessage = (event) => {
+		try {
+			const payload = JSON.parse(event.data);
+			handlers[payload.name]?.forEach((handler) => handler({ data: payload.data }));
+		} catch {}
+	};
+	eventSource.onerror = () => {
+		eventSource?.close();
+		eventSource = null;
+		if (reconnectTimer) window.clearTimeout(reconnectTimer);
+		reconnectTimer = window.setTimeout(connect, 3000);
+	};
 }
 
-// Start connecting immediately.
-connect();
-
 export const Events = {
-  /**
-   * Register a handler for a named event.
-   * The callback receives `{ data }` matching Wails event format.
-   */
-  On(name: string, cb: EventHandler): void {
-    if (!handlers[name]) handlers[name] = [];
-    handlers[name].push(cb);
-  },
-
-  Off(name: string, cb?: EventHandler): void {
-    if (!handlers[name]) return;
-    if (cb) {
-      handlers[name] = handlers[name].filter((h) => h !== cb);
-    } else {
-      delete handlers[name];
-    }
-  },
-
-  Emit(_name: string, ..._args: unknown[]): void {
-    // Client-to-server events are handled via REST calls; nothing to do here.
-  }
+	On(name: string, callback: EventHandler) {
+		if (!handlers[name]) handlers[name] = [];
+		handlers[name].push(callback);
+		connect();
+	},
+	Off(name: string, callback?: EventHandler) {
+		if (!handlers[name]) return;
+		if (callback) handlers[name] = handlers[name].filter((item) => item !== callback);
+		else delete handlers[name];
+	}
 };
 
 export const Browser = {
-  OpenURL(url: string): void {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
+	OpenURL(url: string) {
+		if (typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer");
+	}
 };
