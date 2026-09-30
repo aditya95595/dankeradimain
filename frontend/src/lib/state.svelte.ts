@@ -41,7 +41,7 @@ class Cfg {
 		Events.On("configUpdate", (event) => {
 			if (event.data && typeof event.data === "object") this.c = event.data;
 		});
-		void this.fetch();
+		if (typeof window !== "undefined") void this.fetch();
 	}
 
 	async fetch() {
@@ -83,7 +83,7 @@ class Instances {
 	i = $state<any[]>([]);
 	constructor() {
 		Events.On("instanceUpdate", (event) => this.upsert(event.data));
-		void this.fetch();
+		if (typeof window !== "undefined") void this.fetch();
 	}
 	async fetch() {
 		try {
