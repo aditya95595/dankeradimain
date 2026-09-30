@@ -85,9 +85,9 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			return
 		}
 		var body struct {
-			AccountIndex int
-			ReadyState string
-			BreakUpdateTime string
+			AccountIndex int `json:"accountIndex"`
+			ReadyState string `json:"readyState"`
+			BreakUpdateTime string `json:"breakUpdateTime"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -128,7 +128,7 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			return
 		}
 		if len(parts) == 1 && r.Method == http.MethodDelete {
-			var body struct { Restarting bool }
+			var body struct { Restarting bool `json:"restarting"` }
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			dmgService.RemoveInstance(token, body.Restarting)
 			writeJSON(w, map[string]bool{"success": true})
@@ -168,7 +168,7 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var body struct { Status types.OnlineStatus }
+		var body struct { Status types.OnlineStatus `json:"status"` }
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -238,7 +238,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var body struct { Password string }
+	var body struct { Password string `json:"password"` }
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
