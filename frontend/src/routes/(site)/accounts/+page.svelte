@@ -38,7 +38,7 @@
 	<div class="grid gap-4 lg:grid-cols-[1fr_360px]">
 		<section class="space-y-3">
 			{#each cfg.c.accounts ?? [] as account, index}
-				{@const instance = instances.i.find((item) => item.instanceId && item.accountCfg?.channelID === account.channelID)}
+				{@const instance = instances.i.find((item) => item.instanceId && (item.accountIndex === index || (item.accountIndex === undefined && item.accountCfg?.channelID === account.channelID)))}
 				<div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
 					<div class="flex items-start justify-between gap-4">
 						<div>
