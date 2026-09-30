@@ -1,86 +1,4 @@
-import { Events } from "@wailsio/runtime";
-import type {
-	AccountsConfig,
-	AdventureConfig,
-	AutoBuyConfig,
-	AutoUseConfig,
-	CommandsConfig,
-	Config,
-	Cooldowns,
-	GuiConfig
-} from "@/bindings/github.com/autocord-org/dmg/config";
-import {
-	GetConfig,
-	UpdateConfig
-} from "@/bindings/github.com/autocord-org/dmg/dmgservice";
-import { Browser } from "@wailsio/runtime";
-import type { OnlineStatus } from "@/bindings/github.com/autocord-org/dmg/discord/types";
-import type { View } from "@/bindings/github.com/autocord-org/dmg/instance";
-
-(window as any).Browser = Browser;
-
-class Cfg {
-	c: Config = $state({
-		state: false,
-		apiKey: "",
-		gui: {} as GuiConfig,
-		readAlerts: false,
-		discordStatus: "" as OnlineStatus,
-		eventsCorrectChance: 0.65,
-		cooldowns: {} as Cooldowns,
-		accounts: [] as AccountsConfig[] | null,
-		autoBuy: {} as AutoBuyConfig,
-		autoUse: {} as AutoUseConfig,
-		commands: {} as CommandsConfig,
-		adventure: {} as AdventureConfig
-	});
-
-	constructor() {
-		$effect.root(() => {
-			$effect(() => {
-				if (this.c.discordStatus !== "") {
-					UpdateConfig(this.c);
-				}
-			});
-		});
-
-		Events.On("configUpdate", (event) => {
-			this.c = event.data;
-		});
-
-		this.fetch();
-	}
-
-	async fetch() {
-		const cfg = await GetConfig();
-		if (cfg) {
-			this.c = cfg;
-		}
-	}
-}
-
-class Instances {
-	i = $state<View[]>([]);
-
-	constructor() {
-		Events.On("instanceUpdate", (event) => {
-			const instance = this.findInstance(event.data.accountCfg.token);
-			if (instance) {
-				instances.i[this.findInstanceIndex(event.data.accountCfg.token)] = event.data;
-			} else {
-				this.i.push(event.data);
-			}
-		});
-	}
-
-	findInstanceIndex = (token: string) => {
-		return this.i.findIndex((instance) => instance.accountCfg.token === token);
-	};
-
-	findInstance = (token: string) => {
-		return this.i.find((instance) => instance.accountCfg.token === token);
-	};
-}
+import { Events } from "$lib/wails-shim";
 
 export type LogEntry = {
 	level: string;
@@ -91,57 +9,135 @@ export type LogEntry = {
 	id: number;
 };
 
+const emptyConfig = {
+	state: false,
+	apiKey: "",
+	gui: { theme: "dark" },
+	readAlerts: false,
+	discordStatus: "online",
+	eventsCorrectChance: 0.65,
+	cooldowns: {
+		buttonClickDelay: { minSeconds: 0, maxSeconds: 0 },
+		commandInterval: { minSeconds: 0, maxSeconds: 0 },
+		breakCooldown: { minHours: 0, maxHours: 0 },
+		breakDuration: { minHours: 0, maxHours: 0 },
+		startDelay: { minMinutes: 0, maxMinutes: 0 },
+		eventDelay: { minSeconds: 0, maxSeconds: 0 }
+	},
+	accounts: [],
+	autoBuy: {},
+	autoUse: {},
+	commands: {},
+	adventure: {}
+};
+
+class Cfg {
+	c: any = $state(structuredClone(emptyConfig));
+	loading = $state(true);
+	saving = $state(false);
+	error = $state("");
+
+	constructor() {
+		Events.On("configUpdate", (event) => {
+			if (event.data && typeof event.data === "object") this.c = event.data;
+		});
+		void this.fetch();
+	}
+
+	async fetch() {
+		this.loading = true;
+		try {
+			const response = await api("/api/config");
+			if (response.status === 401) {
+				window.location.hash = "#/login";
+				return;
+			}
+			if (!response.ok) throw new Error(await response.text());
+			this.c = await response.json();
+		} catch (error) {
+			this.error = error instanceof Error ? error.message : String(error);
+		} finally {
+			this.loading = false;
+		}
+	}
+
+	async save() {
+		this.saving = true;
+		this.error = "";
+		try {
+			const response = await api("/api/config", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(this.c)
+			});
+			if (!response.ok) throw new Error(await response.text());
+		} catch (error) {
+			this.error = error instanceof Error ? error.message : String(error);
+		} finally {
+			this.saving = false;
+		}
+	}
+}
+
+class Instances {
+	i = $state<any[]>([]);
+	constructor() {
+		Events.On("instanceUpdate", (event) => this.upsert(event.data));
+		void this.fetch();
+	}
+	async fetch() {
+		try {
+			const response = await api("/api/instances");
+			if (response.ok) this.i = await response.json();
+		} catch {}
+	}
+	upsert(instance: any) {
+		if (!instance) return;
+		const id = instance.instanceId;
+		const index = this.i.findIndex((item) => item.instanceId === id);
+		if (index === -1) this.i.push(instance);
+		else this.i[index] = instance;
+	}
+	async restart(id: string) {
+		return api("/api/instances/" + encodeURIComponent(id) + "/restart", { method: "POST" });
+	}
+	async stop(id: string) {
+		return api("/api/instances/" + encodeURIComponent(id), {
+			method: "DELETE",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ restarting: false })
+		});
+	}
+	async restartAll() {
+		return api("/api/instances/restart", { method: "POST" });
+	}
+}
+
 class Logs {
 	importantLogs = $state<LogEntry[]>([]);
 	othersLogs = $state<LogEntry[]>([]);
 	discordLogs = $state<LogEntry[]>([]);
 	nextId = 0;
-
 	constructor() {
 		Events.On("log", (event) => {
-			const data = event.data;
-
-			const logEntry = this.createLogEntry(data.level, data.type, data.username, data.message);
-
-			switch (data.level) {
-				case "important":
-					this.addLogEntry(this.importantLogs, logEntry);
-					break;
-				case "others":
-					this.addLogEntry(this.othersLogs, logEntry);
-					break;
-				case "discord":
-					this.addLogEntry(this.discordLogs, logEntry);
-					break;
-			}
+			const data = event.data as any;
+			const entry: LogEntry = {
+				level: data.level ?? "",
+				type: data.type ?? "",
+				username: data.username ?? "",
+				message: String(data.message ?? ""),
+				timestamp: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+				id: this.nextId++
+			};
+			if (entry.level === "important") this.importantLogs.push(entry);
+			else if (entry.level === "discord") this.discordLogs.push(entry);
+			else this.othersLogs.push(entry);
 		});
 	}
+}
 
-	private createLogEntry(level: string, type: string, username: string, msg: string): LogEntry {
-		const now = new Date();
-		const hours = now.getHours();
-		const minutes = now.getMinutes();
-		const ampm = hours >= 12 ? "PM" : "AM";
-		const formattedTime = `${hours % 12 || 12}:${minutes < 10 ? "0" : ""}${minutes}${ampm}`;
-
-		const processedMsg = msg.replace(
-			/\[([^\]]+)]\((https?:\/\/[^)]+)\)/g,
-			`<a href="#" onclick="event.preventDefault(); if(window.Browser && window.Browser.OpenURL){ window.Browser.OpenURL('$2'); } return false;" class="underline text-blue-500">$1</a>`
-		);
-
-		return {
-			level,
-			type,
-			username,
-			message: processedMsg,
-			timestamp: formattedTime,
-			id: this.nextId++
-		};
-	}
-
-	private addLogEntry(logArray: LogEntry[], entry: LogEntry) {
-		logArray.push(entry);
-	}
+export async function api(path: string, init: RequestInit = {}) {
+	return fetch(path, { ...init, credentials: "same-origin" });
 }
 
 export const cfg = $state(new Cfg());
