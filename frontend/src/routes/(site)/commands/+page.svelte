@@ -1,284 +1,103 @@
 <script lang="ts">
 	import { cfg } from "$lib/state.svelte";
-	import { Switch } from "$lib/components/ui/switch";
-	import * as Select from "$lib/components/ui/select/index.js";
-	import * as Card from "$lib/components/ui/card";
-	import { Checkbox } from "$lib/components/ui/checkbox";
-	import { fade } from "svelte/transition";
-	import { Input } from "$lib/components/ui/input";
-	import { Label } from "$lib/components/ui/label";
-	import { TypedObject } from "$lib/utils.js";
-	import {
-		AdventureOption,
-		type CommandsConfig,
-		FishLocation
-	} from "@/bindings/github.com/autocord-org/dmg/config";
 	import { Slider } from "$lib/components/ui/slider";
 
-	function formatString(input: string): string {
-		return input
-			.replace(/[0-9]{2,}/g, (match) => ` ${match} `)
-			.replace(/[^A-Z0-9][A-Z]/g, (match) => `${match[0]} ${match[1]}`)
-			.replace(/[A-Z][A-Z][^A-Z0-9]/g, (match) => `${match[0]} ${match[1]}${match[2]}`)
-			.replace(/ {2,}/g, () => " ")
-			.replace(/\s./g, (match) => match.toUpperCase())
-			.replace(/^./, (match) => match.toUpperCase())
-			.trim();
-	}
-
-	function updateCfg(
-		commandKey: string,
-		optionKey: string,
-		value: string[] | string | number | boolean | Event
-	) {
-		if (value instanceof Event) {
-			value = (value.target as HTMLInputElement).value;
-			if (value.includes(",")) {
-				value = value.split(",").map((val) => val.trim());
-			}
-		}
-
-		if (Array.isArray(commands[commandKey][optionKey])) {
-			if (!Array.isArray(value)) {
-				value = [String(value)];
-			}
-		} else if (typeof commands[commandKey][optionKey] === "number") {
-			value = Number(value);
-		}
-		commands[commandKey][optionKey] = value;
-	}
-
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const commands = cfg.c.commands as CommandsConfig & Record<string, any>;
-
-	const enumMap = {
-		AdventureOption,
-		FishLocation
+	const enumValues: Record<string, string[]> = {
+		adventureOption: ["brazil", "space", "vacation", "west"],
+		fishLocation: ["Vertigo Beach", "Wily River", "Underwater Sanctuary", "Camp Guillermo", "Scurvy Waters", "Northpoint Cabin"]
 	};
 
-	function isEnum(value: string): boolean {
-		return Object.keys(enumMap).includes(
-			String(value).charAt(0).toUpperCase() + String(value).slice(1)
-		);
+	function label(key: string) {
+		return key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
 	}
 
-	function getEnumValues(enumName: string): string[] {
-		const enumObject =
-			enumMap[
-				(String(enumName).charAt(0).toUpperCase() +
-					String(enumName).slice(1)) as keyof typeof enumMap
-			];
-
-		return Object.values(enumObject).filter((v) => v !== "");
+	function valuesFor(key: string, value: any) {
+		if (key === "adventureOption") return enumValues.adventureOption;
+		if (key === "fishLocation") return enumValues.fishLocation;
+		return Array.isArray(value) ? value : [];
 	}
 
-	let fishOnlyEnabled = $state(false);
-	let backupCommandsState: Record<string, boolean> = {};
-
-	$effect(() => {
-		if (commands.fish.state && commands.fish.fishOnly) {
-			fishOnlyEnabled = true;
-		}
-	});
-
-	function toggle(option: string, value: boolean | Event) {
-		if (value instanceof Event) {
-			value = (value.target as HTMLInputElement).checked;
-		}
-
-		if (option === "fishOnly") {
-			fishOnlyEnabled = value;
-			if (value) {
-				for (const command in commands) {
-					if (command !== "fish") {
-						backupCommandsState[command] = commands[command].state;
-						commands[command].state = false;
-					}
-				}
-			} else {
-				for (const command in backupCommandsState) {
-					if (command !== "fish") {
-						commands[command].state = backupCommandsState[command] ?? commands[command].state;
-					}
-				}
+	function toggleFishOnly(value: boolean) {
+		cfg.c.fish.fishOnly = value;
+		if (value) {
+			for (const [key, command] of Object.entries(cfg.c.commands ?? {})) {
+				if (key !== "fish" && command && typeof command === "object") (command as any).state = false;
 			}
-		} else if (option === "fish") {
-			if (!value && fishOnlyEnabled) {
-				fishOnlyEnabled = false;
-				for (const command in backupCommandsState) {
-					if (command !== "fish") {
-						commands[command].state = backupCommandsState[command] ?? commands[command].state;
-					}
-				}
-			} else if (value && commands.fish.fishOnly) {
-				fishOnlyEnabled = true;
-				for (const command in commands) {
-					if (command !== "fish") {
-						backupCommandsState[command] = commands[command].state;
-						commands[command].state = false;
-					}
-				}
-			}
+			cfg.c.fish.state = true;
 		}
 	}
 
-	let fishOnlyDelay = $state([
-		commands["fish"].fishOnlyDelay.minSeconds,
-		commands["fish"].fishOnlyDelay.maxSeconds
-	]);
-
-	$effect(() => {
-		if (commands.fish.fishOnly) {
-			fishOnlyDelay = [
-				commands["fish"].fishOnlyDelay.minSeconds,
-				commands["fish"].fishOnlyDelay.maxSeconds
-			];
-		}
-	});
+	function updateArray(command: any, key: string, event: Event) {
+		const value = (event.target as HTMLInputElement).value;
+		command[key] = value.split(",").map((item) => item.trim()).filter(Boolean);
+	}
 </script>
 
-<div
-	in:fade={{ delay: 100, duration: 250 }}
-	out:fade={{ duration: 100 }}
-	class="z-10 h-full space-y-4"
->
-	{#if cfg.c.gui}
-		{#each TypedObject.keys(commands) as commandKey (commandKey)}
-			<Card.Root
-				class={`${commands[commandKey].state ? "border-primary bg-primary-foreground/40" : ""}`}
-			>
-				<Card.Header>
-					<div class="flex items-center space-x-2">
-						<Card.Title>{formatString(commandKey)}</Card.Title>
-						<Switch
-							id={commandKey}
-							bind:checked={commands[commandKey].state}
-							disabled={fishOnlyEnabled && commandKey !== "fish"}
-							onCheckedChange={(e) => toggle(commandKey, e)}
-						/>
-						<Label for={commandKey}>Enabled</Label>
+<div class="space-y-5">
+	<div>
+		<p class="text-xs font-medium uppercase tracking-[0.2em] text-indigo-400">Automation</p>
+		<h2 class="mt-1 text-2xl font-bold">Auto Grind Commands</h2>
+		<p class="mt-1 max-w-3xl text-sm text-slate-500">The original DMG command configuration is retained. This page only changes how you control it from the browser.</p>
+	</div>
+
+	<div class="grid gap-4 xl:grid-cols-2">
+		{#each Object.entries(cfg.c.commands ?? {}) as [commandKey, command] (commandKey)}
+			{@const cmd = command as any}
+			<section class="rounded-2xl border {cmd.state ? "border-indigo-500/40 bg-indigo-500/[0.04]" : "border-slate-800 bg-slate-900/60"} p-4">
+				<div class="flex items-center justify-between gap-3">
+					<div>
+						<h3 class="font-semibold">{label(commandKey)}</h3>
+						<p class="text-xs text-slate-500">Minimum interval: {cmd.delay ?? 0}s</p>
 					</div>
-				</Card.Header>
-				<Card.Content>
-					<div class="flex flex-col space-y-2">
-						{#each TypedObject.keys(commands[commandKey]) as optionKey (optionKey)}
-							{#if optionKey !== "state"}
-								{#if typeof commands[commandKey][optionKey] === "string" && isEnum(optionKey)}
-									<div class="flex w-1/2 flex-row items-center space-x-2">
-										<Label class="whitespace-nowrap" for={`${commandKey}_${optionKey}`}>
-											{formatString(optionKey)}
-										</Label>
-										<Select.Root bind:value={commands[commandKey][optionKey]} type="single">
-											<Select.Trigger class="w-[180px]"
-												>{commands[commandKey][optionKey]}</Select.Trigger
-											>
-											<Select.Content>
-												{#each getEnumValues(optionKey) as enumValue}
-													<Select.Item value={enumValue}>{enumValue}</Select.Item>
-												{/each}
-											</Select.Content>
-										</Select.Root>
-									</div>
-								{:else if commands[commandKey][optionKey] instanceof Array && isEnum(optionKey)}
-									<div class="flex w-1/2 flex-row items-center space-x-2">
-										<Label class="whitespace-nowrap" for={`${commandKey}_${optionKey}`}>
-											{formatString(optionKey)}
-										</Label>
-										<Select.Root bind:value={commands[commandKey][optionKey]} type="multiple">
-											<Select.Trigger>
-												Select {formatString(optionKey)}s
-											</Select.Trigger>
-											<Select.Content>
-												{#each getEnumValues(optionKey) as enumValue}
-													<Select.Item value={enumValue}>
-														{enumValue}
-													</Select.Item>
-												{/each}
-											</Select.Content>
-										</Select.Root>
-									</div>
-								{:else if typeof commands[commandKey][optionKey] === "string"}
-									<div class="flex w-1/2 flex-row items-center space-x-2">
-										<Label class="whitespace-nowrap" for={`${commandKey}_${optionKey}`}>
-											{formatString(optionKey)}
-										</Label>
-										<Input
-											type="text"
-											id={`${commandKey}_${optionKey}`}
-											value={commands[commandKey][optionKey]}
-											oninput={(e) => updateCfg(commandKey, optionKey, e)}
-										/>
-									</div>
-								{:else if typeof commands[commandKey][optionKey] === "number"}
-									<div class="flex w-1/2 flex-row items-center space-x-2">
-										<Label class="whitespace-nowrap" for={`${commandKey}_${optionKey}`}>
-											{formatString(optionKey)}
-										</Label>
-										<Input
-											type="number"
-											id={`${commandKey}_${optionKey}`}
-											value={commands[commandKey][optionKey]}
-											oninput={(e) => updateCfg(commandKey, optionKey, e)}
-										/>
-									</div>
-								{:else if typeof commands[commandKey][optionKey] === "boolean"}
-									<div class="flex w-full flex-row items-center space-x-2">
-										<Checkbox
-											id={`${commandKey}_${optionKey}`}
-											bind:checked={commands[commandKey][optionKey]}
-											onCheckedChange={(e) => toggle(optionKey, e)}
-										/>
-										<Label
-											class="cursor-pointer whitespace-nowrap"
-											for={`${commandKey}_${optionKey}`}
-										>
-											{formatString(optionKey)}
-										</Label>
-									</div>
-								{:else if commands[commandKey][optionKey] instanceof Array}
-									<div class="flex w-full flex-row items-center space-x-2">
-										<Label class="whitespace-nowrap" for={`${commandKey}_${optionKey}`}>
-											{formatString(optionKey)}
-										</Label>
-										{#if optionKey === "order"}
-											<Input
-												type="text"
-												id={`${commandKey}_${optionKey}`}
-												value={commands[commandKey][optionKey].join(", ")}
-												oninput={(e) => {
-													updateCfg(commandKey, optionKey, e);
-												}}
-											/>
-										{:else}
-											<Input
-												value={commands[commandKey][optionKey].join(", ")}
-												id={`${commandKey}_${optionKey}`}
-												oninput={(e) => updateCfg(commandKey, optionKey, e)}
-											/>
-										{/if}
-									</div>
-								{:else if optionKey === "fishOnlyDelay" && commands.fish.fishOnly}
-									<div class="flex w-1/2 flex-row items-center space-x-2">
-										<Label class="whitespace-nowrap" for={`${commandKey}_${optionKey}`}>
-											{formatString(optionKey)}
-											({fishOnlyDelay[0].toFixed(1)} - {fishOnlyDelay[1].toFixed(1)} seconds)
-										</Label>
-										<Slider
-											type="multiple"
-											bind:value={fishOnlyDelay}
-											max={20}
-											min={0}
-											step={0.1}
-										/>
-									</div>
+					<button
+						class="rounded-full px-3 py-1 text-xs {cmd.state ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-800 text-slate-500"}"
+						disabled={cfg.c.fish?.fishOnly && commandKey.toLowerCase() !== "fish"}
+						onclick={() => {
+							cmd.state = !cmd.state;
+							if (cmd.state && cfg.c.fish?.fishOnly && commandKey.toLowerCase() !== "fish") cmd.state = false;
+						}}
+					>{cmd.state ? "Enabled" : "Disabled"}</button>
+				</div>
+
+				<div class="mt-4 grid gap-3 sm:grid-cols-2">
+					{#each Object.entries(cmd) as [key, value] (key)}
+						{#if key !== "state" && key !== "delay" && key !== "fishOnlyDelay"}
+							<div class="space-y-1.5 {Array.isArray(value) ? "sm:col-span-2" : ""}">
+								<label class="text-xs text-slate-500">{label(key)}</label>
+								{#if typeof value === "boolean"}
+									<button class="block rounded-lg border border-slate-700 px-3 py-2 text-xs {value ? "border-indigo-500/50 bg-indigo-500/10 text-indigo-300" : "text-slate-400"}" onclick={() => (cmd[key] = !value)}>{value ? "On" : "Off"}</button>
+								{:else if typeof value === "number"}
+									<input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-indigo-500" type="number" step="0.1" value={value} oninput={(e) => (cmd[key] = Number((e.target as HTMLInputElement).value))} />
+								{:else if Array.isArray(value)}
+									<input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-indigo-500" value={value.join(", ")} oninput={(e) => updateArray(cmd, key, e)} />
+								{:else if enumValues[key]}
+									<select class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={value} onchange={(e) => (cmd[key] = (e.target as HTMLSelectElement).value)}>
+										{#each valuesFor(key, value) as option}<option value={option}>{option}</option>{/each}
+									</select>
+								{:else}
+									<input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={value} oninput={(e) => (cmd[key] = (e.target as HTMLInputElement).value)} />
 								{/if}
-							{/if}
-						{/each}
+							</div>
+						{:else if key === "fishOnlyDelay"}
+							<div class="sm:col-span-2">
+								<label class="text-xs text-slate-500">Fish-only delay</label>
+								<Slider type="multiple" bind:value={[cmd.fishOnlyDelay.minSeconds, cmd.fishOnlyDelay.maxSeconds]} max={20} min={0} step={0.1} />
+							</div>
+						{/if}
+					{/each}
+				</div>
+
+				{#if commandKey.toLowerCase() === "fish"}
+					<div class="mt-4 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+						<div class="flex items-center justify-between">
+							<div><p class="text-sm font-medium">Fish Only Mode</p><p class="text-xs text-slate-500">Preserves the existing fish-only behavior.</p></div>
+							<button class="rounded-full px-3 py-1 text-xs {cmd.fishOnly ? "bg-indigo-500/15 text-indigo-300" : "bg-slate-800 text-slate-500"}" onclick={() => toggleFishOnly(!cmd.fishOnly)}>{cmd.fishOnly ? "Enabled" : "Disabled"}</button>
+						</div>
 					</div>
-				</Card.Content>
-			</Card.Root>
+				{/if}
+			</section>
 		{/each}
-	{:else}
-		<p>Loading config...</p>
-	{/if}
+	</div>
+
+	<p class="text-xs text-slate-600">Changes are held locally until you press <strong class="text-slate-400">Save changes</strong>.</p>
 </div>
