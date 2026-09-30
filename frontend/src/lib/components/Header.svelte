@@ -1,118 +1,43 @@
 <script lang="ts">
 	import { page } from "$app/state";
-	import { Button } from "$lib/components/ui/button";
-	import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-	import { cfg } from "$lib/state.svelte";
-	import * as Select from "$lib/components/ui/select";
+	import { cfg, instances } from "$lib/state.svelte";
 	import { Moon, Sun } from "svelte-radix";
-	import { Theme } from "@/bindings/github.com/autocord-org/dmg/config";
 
-	let theme = $state<Theme>();
-	let sunClass = $state("");
-	let moonClass = $state("");
+	let dark = $state(true);
+	let title = $derived((page.url.hash.split("#/")[1] || "overview").split("/")[0] || "overview");
 
-	let title = $derived(
-		(page.url.hash.split("#/")[1] || "logs")
-			.split(" ")
-			.map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ""))
-			.join(" ")
-	);
-
-	$effect(() => {
-		if (cfg.c?.gui) {
-			theme = cfg.c.gui.theme;
-			setTheme(theme);
-		}
-	});
-
-	function setTheme(theme: Theme) {
-		if (!cfg.c) return;
-		cfg.c.gui.theme = theme;
-
-		let isDark = theme === "dark";
-		if (theme === "system") {
-			isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-		}
-		sunClass = `h-[1.2rem] w-[1.2rem] transition-all ${
-			isDark ? "rotate-90 scale-0" : "rotate-0 scale-100"
-		}`;
-		moonClass = `absolute h-[1.2rem] w-[1.2rem] transition-all ${
-			isDark ? "rotate-0 scale-100" : "rotate-90 scale-0"
-		}`;
-
-		const handleThemeChange = (e: MediaQueryListEvent) => {
-			if (theme === "system") {
-				isDark = e.matches;
-
-				sunClass = `h-[1.2rem] w-[1.2rem] transition-all ${
-					isDark ? "rotate-90 scale-0" : "rotate-0 scale-100"
-				}`;
-				moonClass = `absolute h-[1.2rem] w-[1.2rem] transition-all ${
-					isDark ? "rotate-0 scale-100" : "rotate-90 scale-0"
-				}`;
-				document.documentElement.classList.toggle("dark", isDark);
-			}
-		};
-
-		if (theme === "system") {
-			const darkModeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-			darkModeMediaQuery.addEventListener("change", handleThemeChange);
-
-			handleThemeChange({
-				matches: darkModeMediaQuery.matches,
-				media: darkModeMediaQuery.media
-			} as MediaQueryListEvent);
-		} else {
-			document.documentElement.classList.toggle("dark", theme === "dark");
-		}
+	function toggleTheme() {
+		dark = !dark;
+		document.documentElement.classList.toggle("dark", dark);
+		cfg.c.gui.theme = dark ? "dark" : "light";
 	}
 
-	function toggleCommands(state: boolean) {
-		if (!cfg.c) return;
-		const commands = cfg.c.commands as unknown as Record<string, { state: boolean }>;
-		for (let command in commands) {
-			commands[command].state = state;
+	function toggleBot() {
+		cfg.c.state = !cfg.c.state;
+	}
+
+	function toggleCommands(value: boolean) {
+		for (const command of Object.values(cfg.c.commands ?? {})) {
+			if (command && typeof command === "object" && "state" in command) command.state = value;
 		}
 	}
 </script>
 
-<div
-	class="header-container border-border sticky top-0 z-30 flex w-full flex-row border-b bg-white/25 dark:bg-[hsl(220deg_10%_10%/0.25)]"
->
-	<div class="backdrop"></div>
-	<div class="backdrop-edge"></div>
-
-	<div class="border-border flex h-14 max-w-48 items-center border-r-2 border-b px-2">
-		<Select.Root type="single" disabled>
-			<Select.Trigger class="w-[180px]">config.json</Select.Trigger>
-			<Select.Content>
-				<Select.Item value="test">Test</Select.Item>
-			</Select.Content>
-		</Select.Root>
+<header class="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 backdrop-blur md:px-6">
+	<div>
+		<h1 class="text-sm font-semibold capitalize text-white md:text-base">{title}</h1>
+		<p class="hidden text-[11px] text-slate-500 sm:block">Remote control · live events enabled</p>
 	</div>
-	<div class="flex w-full flex-row justify-between px-4">
-		<h1 class="flex items-center">{title}</h1>
-		{#if title === "Commands" || theme}
-			<div class="flex flex-row items-center space-x-2">
-				{#if title === "Commands"}
-					<Button onclick={() => toggleCommands(true)}>Enable all</Button>
-					<Button variant="destructive" onclick={() => toggleCommands(false)}>Disable all</Button>
-				{/if}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						<Button variant="outline" size="icon">
-							<Sun class={sunClass} />
-							<Moon class={moonClass} />
-							<span class="sr-only">Toggle theme</span>
-						</Button>
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="end">
-						<DropdownMenu.Item onclick={() => setTheme(Theme.Light)}>Light</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTheme(Theme.Dark)}>Dark</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTheme(Theme.System)}>System</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			</div>
+	<div class="flex items-center gap-2">
+		{#if title === "commands"}
+			<button class="hidden rounded-lg border border-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-900 sm:block" onclick={() => toggleCommands(true)}>Enable all</button>
+			<button class="hidden rounded-lg border border-red-900/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950/30 sm:block" onclick={() => toggleCommands(false)}>Disable all</button>
 		{/if}
+		<button class="rounded-lg border border-slate-800 p-2 hover:bg-slate-900" onclick={toggleTheme} title="Toggle theme">
+			{#if dark}<Moon class="size-4" />{:else}<Sun class="size-4" />{/if}
+		</button>
+		<button class="rounded-lg px-3 py-1.5 text-xs font-medium {cfg.c.state ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}" onclick={toggleBot}>
+			{cfg.c.state ? "Enabled" : "Disabled"}
+		</button>
 	</div>
-</div>
+</header>
