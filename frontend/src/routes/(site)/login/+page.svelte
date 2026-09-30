@@ -33,7 +33,7 @@
 			<p class="mt-2 text-sm text-slate-500">Sign in to manage your server remotely.</p>
 		</div>
 		<form onsubmit={(e) => { e.preventDefault(); login(); }} class="space-y-4">
-			<input class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-indigo-500" type="password" bind:value={password} placeholder="Dashboard password" autofocus />
+			<input class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-indigo-500" type="password" bind:value={password} placeholder="Dashboard password" />
 			{#if error}<p class="text-xs text-red-300">{error}</p>{/if}
 			<button class="w-full rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold hover:bg-indigo-400 disabled:opacity-50" disabled={loading || !password}>
 				{loading ? "Signing in..." : "Sign in"}
