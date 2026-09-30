@@ -260,7 +260,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	dashboardAuth.Unlock()
 	http.SetCookie(w, &http.Cookie{
 		Name: "dmg_session", Value: token, Path: "/", HttpOnly: true,
-		Secure: true, SameSite: http.SameSiteStrict, MaxAge: 86400,
+		Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: 86400,
 	})
 	writeJSON(w, map[string]bool{"success": true})
 }
@@ -273,7 +273,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: "dmg_session", Value: "", Path: "/", HttpOnly: true,
-		Secure: true, SameSite: http.SameSiteStrict, MaxAge: -1,
+		Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: -1,
 	})
 	writeJSON(w, map[string]bool{"success": true})
 }
