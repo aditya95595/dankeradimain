@@ -1,86 +1,96 @@
-# Run DMG 24/7 on Wispbyte (fishing-only)
+# DMG Browser Dashboard on Wispbyte
 
-This project is a **Go** app. Wispbyte free tier works best if you upload a **prebuilt Linux binary** (`dmg-web`) so you do not need a Go Docker image.
+This branch builds DMG as a browser-first control service. The Go backend runs the existing grinder/Discord logic; the Svelte frontend is only a remote control UI.
 
-Free tier notes (as of 2026):
-- ~512 MB RAM / ~1 GB disk / limited CPU
-- Log in to [wispbyte.com/client](https://wispbyte.com/client) about every **2 weeks**
-- **One Discord connection per server** (do not stack many accounts on free tier)
+## What changed
 
-## Secrets (recommended)
+- Browser dashboard with login, overview, live logs, accounts, commands and settings.
+- Existing auto-grind command logic is unchanged.
+- Existing command defaults and command-specific settings remain in the Go/config code.
+- Discord/account tokens are never returned by the browser API.
+- Management API endpoints require an authenticated dashboard session.
+- SSE live events are authenticated.
+- Instance URLs use a short server-side ID instead of exposing the Discord token.
+- The dashboard can start, stop and restart instances remotely.
+- Wispbyte can keep the compiled Linux binary running continuously.
 
-In Wispbyte **Startup → Environment variables / Secrets**, set:
+## Build the Linux web binary
 
-| Name | Required | Description |
-|------|----------|-------------|
-| `DISCORD_TOKEN` | Yes | Your Discord **user** token (or use `TOKEN`) |
-| `CHANNEL_ID` | Yes | Channel ID where Dank Memer is used |
-| `API_KEY` | No | Captcha solver API key |
-| `PORT` | Auto | Usually set by Wispbyte — do not override unless needed |
+The repository has a GitHub Actions workflow named **Web dashboard build**. It:
 
-The bot reads these on startup and injects them into the first account. You can leave `accounts: []` empty in `config.json`.
+1. installs the frontend dependencies;
+2. runs `npm run check`;
+3. builds `frontend/dist`;
+4. runs `go test ./...`;
+5. embeds the generated frontend into the Go binary;
+6. produces the `dmg-web-linux-amd64` artifact.
 
-## 1. Prepare config (no secrets in the file)
+Download that artifact from the workflow and upload the `dmg-web` binary to Wispbyte.
 
-```bash
-cp config.example.json config.json
-```
+Do not build only the Go binary before building the frontend: `main.go` embeds `frontend/dist`.
 
-Keep fishing enabled (`commands.fish.state` + `fishOnly`). Leave token/channel empty if using secrets.
+## Wispbyte setup
 
-## 2. Get a Linux binary
+Wispbyte documents always-on hosting for Discord bots and web applications. Use a server/runtime that can execute the prebuilt Linux binary. Their panel provides Startup settings and environment variables.
 
-On a Linux PC (or WSL):
+Upload:
 
-```bash
-git clone https://github.com/aditya95595/dankeradimain.git
-cd dankeradimain
-go build -mod=vendor -o dmg-web .
-```
+- `dmg-web`
+- `config.json` if you use one
 
-Rebuild after pulling so env-secret support is included.
+Recommended Startup command:
 
-## 3. Create a Wispbyte server
+`chmod +x dmg-web && ./dmg-web`
 
-1. Sign in at https://wispbyte.com/client  
-2. **Create Server** → Free Plan  
-3. Pick any available image (Node/Python is fine if you only run the binary)  
-4. **Files** → upload `dmg-web` + `config.json` (+ optional `start-wispbyte.sh`)  
-5. **Startup** → add secrets listed above  
+The application listens on `PORT` when Wispbyte provides it, otherwise it uses port `5000`.
 
-## 4. Startup command
+Health endpoint:
 
-```bash
-chmod +x dmg-web && ./dmg-web
-```
+`/health`
 
-or:
+## Required secrets
 
-```bash
-chmod +x dmg-web start-wispbyte.sh 2>/dev/null; ./start-wispbyte.sh
-```
+Set these in Wispbyte Startup → Environment Variables / Secrets:
 
-Health check path: `/health`
+| Name | Required | Purpose |
+|---|---|---|
+| `DASHBOARD_PASSWORD` | Yes | Password for the remote control dashboard |
+| `DISCORD_TOKEN` or `TOKEN` | Optional | Existing environment-secret account support |
+| `CHANNEL_ID` | Optional | Channel for the environment-secret account |
+| `API_KEY` | Optional | Existing captcha/API configuration |
 
-## 5. Start and verify
+Keep Discord tokens and API keys in Wispbyte secrets instead of committing them to Git.
 
-1. **Start** the server  
-2. Console should log that secrets were applied, then `Logged in as ...`  
-3. Fishing should begin in the configured channel  
+If `DASHBOARD_PASSWORD` is omitted, DMG generates a temporary password and prints a warning in the server console. Set the secret explicitly for normal use.
 
-## 24/7 tips
+## Accessing the dashboard
 
-- One account on free tier  
-- `fishOnly: true`  
-- Log into the panel every ~14 days on free tier  
-- Private channel only; selfbots violate Discord ToS — use at your own risk  
+Open the public web address assigned by Wispbyte. You will see the DMG login page.
 
-## Troubleshooting
+After signing in:
 
-| Symptom | Fix |
-|--------|-----|
-| Permission denied | `chmod +x dmg-web` |
-| Wrong arch | Rebuild Linux amd64 |
-| Invalid token | Check `DISCORD_TOKEN` / `TOKEN` secret |
-| No channel | Set `CHANNEL_ID` secret |
-| OOM | One account only; upgrade plan |
+- **Overview** — instances and live logs
+- **Auto Grind** — the existing command settings
+- **Accounts** — account state and instance controls
+- **Settings** — cooldowns, breaks, events, auto-buy and auto-use
+
+Press **Save changes** after changing configuration.
+
+## Important hosting limitation
+
+Wispbyte currently documents a one-Discord-bot-per-server policy on its free hosting. Check the current Wispbyte rules and your specific plan before running multiple Discord connections on one server.
+
+The dashboard itself can be hosted as a web application, but Wispbyte's hosting policy and Discord's own rules still apply to the underlying workload.
+
+## Security
+
+Do not put `DASHBOARD_PASSWORD`, Discord tokens or API keys in the Git repository.
+
+The browser API intentionally redacts:
+
+- Discord account tokens
+- the DMG API key
+
+The backend restores protected values when saving normal dashboard configuration, so changing command/settings fields does not erase the stored token.
+
+For production, access the dashboard over the HTTPS URL supplied by the host.

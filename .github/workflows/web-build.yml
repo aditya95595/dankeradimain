@@ -1,0 +1,53 @@
+name: Web dashboard build
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+env:
+  NODE_OPTIONS: "--max-old-space-size=4096"
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Check frontend
+        working-directory: frontend
+        run: npm run check
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Test backend
+        run: go test ./...
+
+      - name: Build web binary
+        run: go build -mod=vendor -o dmg-web .
+
+      - name: Upload Wispbyte binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmg-web-linux-amd64
+          path: dmg-web

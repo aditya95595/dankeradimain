@@ -19,6 +19,7 @@
 </script>
 
 <div class="flex flex-col space-y-2">
+	{#if !cfg.loading && cfg.c.autoBuy?.lifeSavers}
 	<Card.Root>
 		<div class="flex flex-row pb-6">
 			<Card.Header class="w-2/6 pr-0">
@@ -58,4 +59,7 @@
 			</Card.Content>
 		</div>
 	</Card.Root>
+	{:else}
+		<div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-500">Loading auto-buy settings…</div>
+	{/if}
 </div>

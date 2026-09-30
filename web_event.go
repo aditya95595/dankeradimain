@@ -9,19 +9,14 @@ import (
 	"sync"
 )
 
-type sseClient struct {
-	ch chan []byte
-}
+type sseClient struct { ch chan []byte }
 
-// EventHub manages SSE clients and broadcasts events.
 type EventHub struct {
-	mu      sync.Mutex
+	mu sync.Mutex
 	clients map[*sseClient]bool
 }
 
-var eventHub = &EventHub{
-	clients: make(map[*sseClient]bool),
-}
+var eventHub = &EventHub{clients: make(map[*sseClient]bool)}
 
 func (h *EventHub) subscribe() *sseClient {
 	client := &sseClient{ch: make(chan []byte, 64)}
@@ -38,10 +33,6 @@ func (h *EventHub) unsubscribe(client *sseClient) {
 	close(client.ch)
 }
 
-// broadcast sends a named event to all connected SSE clients.
-// The data format mimics Wails v3 event format:
-//   - single struct/pointer arg → data = the object
-//   - single primitive or multiple args → data = []interface{args...}
 func (h *EventHub) broadcast(eventName string, args ...interface{}) {
 	var data interface{}
 	if len(args) == 1 {
@@ -56,10 +47,24 @@ func (h *EventHub) broadcast(eventName string, args ...interface{}) {
 		data = args
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{
-		"name": eventName,
-		"data": data,
-	})
+	if eventName == "instanceUpdate" {
+		raw, err := json.Marshal(data)
+		if err == nil {
+			var view map[string]interface{}
+			if json.Unmarshal(raw, &view) == nil {
+				if account, ok := view["accountCfg"].(map[string]interface{}); ok {
+					token, _ := account["token"].(string)
+					account["token"] = ""
+					if token != "" {
+						view["instanceId"] = instanceID(token)
+					}
+				}
+				data = view
+			}
+		}
+	}
+
+	payload, err := json.Marshal(map[string]interface{}{"name": eventName, "data": data})
 	if err != nil {
 		slog.Error("Failed to marshal SSE event", "error", err)
 		return
@@ -71,17 +76,14 @@ func (h *EventHub) broadcast(eventName string, args ...interface{}) {
 		select {
 		case client.ch <- payload:
 		default:
-			// client too slow, skip this event
 		}
 	}
 }
 
-// sseHandler handles GET /api/events (Server-Sent Events).
 func sseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -92,8 +94,7 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 	client := eventHub.subscribe()
 	defer eventHub.unsubscribe(client)
 
-	// Send a heartbeat comment to establish the connection.
-	fmt.Fprintf(w, ": connected\n\n")
+	_, _ = fmt.Fprintf(w, ": connected\n\n")
 	flusher.Flush()
 
 	for {
@@ -102,7 +103,7 @@ func sseHandler(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", msg)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", msg)
 			flusher.Flush()
 		case <-r.Context().Done():
 			return

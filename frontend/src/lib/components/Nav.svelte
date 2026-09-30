@@ -1,114 +1,73 @@
 <script lang="ts">
-	import { Button } from "$lib/components/ui/button";
-	import { ActivityLog, Slash, Person, Gear, DiscordLogo, GithubLogo, Globe } from "svelte-radix";
-	import { page } from "$app/state";
-	import { Browser } from "@wailsio/runtime";
-	import { cfg } from "$lib/state.svelte";
-	import { CheckForUpdates } from "@/bindings/github.com/autocord-org/dmg/dmgservice";
-	import Check from "lucide-svelte/icons/check";
+	import { ActivityLog, Slash, Person, Gear, Globe, DiscordLogo } from "svelte-radix";
+	import { cfg, instances, api } from "$lib/state.svelte";
 	import { onMount } from "svelte";
 
 	const routes = [
-		{ path: "/#/", label: "Logs", icon: ActivityLog },
-		{ path: "/#/settings", label: "Settings", icon: Gear },
+		{ path: "/#/", label: "Overview", icon: ActivityLog },
+		{ path: "/#/commands", label: "Auto Grind", icon: Slash },
 		{ path: "/#/accounts", label: "Accounts", icon: Person },
-		{ path: "/#/commands", label: "Commands", icon: Slash }
+		{ path: "/#/settings", label: "Settings", icon: Gear }
 	];
 
-	let selectedRoute = $derived(page.url.hash.split("#/")[1]);
-	let isUpToDate = $state(false);
+	let selected = $state("");
+	let saved = $state(false);
+	let onlineCount = $derived(instances.i.filter((i) => ["running", "ready"].includes(i.state)).length);
 
-	function toggleState() {
-		cfg.c.state = !cfg.c.state;
+	function updateSelected() {
+		selected = window.location.hash.split("#/")[1] || "";
 	}
 
-	async function checkForUpdates() {
-		const res = await CheckForUpdates();
-		if (!res) {
-			isUpToDate = true;
+	async function save() {
+		await cfg.save();
+		saved = true;
+		setTimeout(() => (saved = false), 1800);
+	}
 
-			setTimeout(() => {
-				isUpToDate = false;
-			}, 7000);
-		}
+	async function logout() {
+		await api("/api/logout", { method: "POST" });
+		window.location.hash = "#/login";
 	}
 
 	onMount(() => {
-		const twelveHours = 12 * 60 * 60 * 1000;
-		const intervalId = setInterval(() => {
-			checkForUpdates();
-		}, twelveHours);
-
-		return () => clearInterval(intervalId);
+		updateSelected();
+		const hashTimer = () => updateSelected();
+		window.addEventListener("hashchange", hashTimer);
+		const timer = setInterval(() => instances.fetch(), 15000);
+		return () => {
+			window.removeEventListener("hashchange", hashTimer);
+			clearInterval(timer);
+		};
 	});
 </script>
 
-<div class="border-border bg-background fixed z-20 flex h-lvh w-48 flex-col border-r-2 pb-14">
-	<div class="flex h-full flex-col justify-between">
-		<div class="group flex flex-col gap-4 py-2">
-			<nav class="grid gap-1 px-2">
-				{#each routes as route (route.path)}
-					<a href={route.path} class="flex flex-col">
-						<Button
-							size="sm"
-							class={`hover:bg-primary/20 justify-start bg-transparent text-black dark:text-white ${
-								`/#/${selectedRoute}` === route.path ? "bg-primary/20" : ""
-							}`}
-						>
-							<route.icon class="mr-2 size-4" aria-hidden="true" />
-							{route.label}
-						</Button>
-					</a>
-				{/each}
-			</nav>
+<aside class="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 border-r border-slate-800 bg-slate-950/95 p-3 md:block">
+	<div class="mb-4 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+		<div class="flex items-center justify-between">
+			<div><p class="text-sm font-semibold">DMG Control</p><p class="text-xs text-slate-500">Browser dashboard</p></div>
+			<span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
 		</div>
-		<div class="flex flex-col px-2">
-			<Button onclick={toggleState} variant={cfg.c.state ? "default" : "destructive"}>
-				{cfg.c.state ? "Enabled" : "Disabled"}
-			</Button>
-			<div class="mt-auto flex flex-row items-center justify-evenly gap-2 p-2">
-				<button
-					class="cursor-pointer"
-					onclick={() => Browser.OpenURL("https://discord.com/invite/KTrmQnhCHb")}
-				>
-					<DiscordLogo class="hover:text-primary/50 h-6 w-6" />
-				</button>
-				<button
-					class="cursor-pointer"
-					onclick={() => Browser.OpenURL("https://www.dankmemer.tools/")}
-				>
-					<Globe class="hover:text-primary/50 h-6 w-6" />
-				</button>
-				<button
-					class="cursor-pointer"
-					onclick={() => Browser.OpenURL("https://github.com/autocord-org/dmg")}
-				>
-					<GithubLogo class="hover:text-primary/50 h-6 w-6" />
-				</button>
-			</div>
-			<button
-				onclick={async () => await checkForUpdates()}
-				class="group block cursor-pointer text-center focus:outline-none"
-			>
-				<span class="relative inline-flex items-center justify-center p-1">
-					{#if isUpToDate}
-						<span
-							class="flex cursor-default flex-row gap-1 transition-opacity duration-300 ease-in-out"
-						>
-							v2.0.0-alpha14 <Check class="text-green-500" />
-						</span>
-					{:else}
-						<span class="transition-opacity duration-300 ease-in-out group-hover:opacity-0">
-							v2.0.0-alpha14
-						</span>
-						<span
-							class="absolute inset-0 flex items-center justify-center text-green-500 opacity-0 transition-opacity duration-300 ease-in-out group-hover:opacity-100"
-						>
-							Check Updates
-						</span>
-					{/if}
-				</span>
-			</button>
+		<p class="mt-3 text-xs text-slate-400">{onlineCount} active instance{onlineCount === 1 ? "" : "s"}</p>
+	</div>
+	<nav class="space-y-1">
+		{#each routes as route}
+			<a href={route.path} class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition {selected === route.path.slice(3) ? "bg-indigo-500/15 text-indigo-300" : "text-slate-400 hover:bg-slate-900 hover:text-white"}">
+				<route.icon class="size-4" />{route.label}
+			</a>
+		{/each}
+	</nav>
+	<div class="mt-auto space-y-2 border-t border-slate-800 pt-4">
+		<button class="w-full rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium hover:bg-indigo-400" onclick={save}>{saved ? "Saved ✓" : "Save changes"}</button>
+		<button class="w-full rounded-lg border border-slate-800 px-3 py-2 text-sm text-slate-400 hover:bg-slate-900 hover:text-white" onclick={logout}>Sign out</button>
+		<div class="flex items-center justify-center gap-3 pt-2 text-slate-500">
+			<a href="https://discord.com/invite/KTrmQnhCHb" target="_blank" rel="noreferrer"><DiscordLogo class="size-5 hover:text-white" /></a>
+			<a href="https://www.dankmemer.tools/" target="_blank" rel="noreferrer"><Globe class="size-5 hover:text-white" /></a>
 		</div>
 	</div>
+</aside>
+
+<div class="fixed bottom-3 left-3 right-3 z-40 flex gap-1 rounded-xl border border-slate-800 bg-slate-950/95 p-1 shadow-xl md:hidden">
+	{#each routes as route}
+		<a href={route.path} class="flex flex-1 flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] {selected === route.path.slice(3) ? "bg-indigo-500/15 text-indigo-300" : "text-slate-500"}"><route.icon class="size-4" />{route.label}</a>
+	{/each}
 </div>

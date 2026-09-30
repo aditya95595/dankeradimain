@@ -2,39 +2,32 @@
 	import "../../app.css";
 	import Nav from "$lib/components/Nav.svelte";
 	import Header from "$lib/components/Header.svelte";
+	import { onMount } from "svelte";
 
-	interface Props {
-		children?: import("svelte").Snippet;
-	}
-
+	interface Props { children?: import("svelte").Snippet; }
 	let { children }: Props = $props();
+	let isLogin = $state(false);
+
+	onMount(() => {
+		const update = () => (isLogin = window.location.hash.includes("#/login"));
+		update();
+		window.addEventListener("hashchange", update);
+		return () => window.removeEventListener("hashchange", update);
+	});
 </script>
 
-<div class="grainy flex min-h-screen flex-col antialiased">
-	<Header />
-	<div class="grow">
-		<div class="flex flex-row">
-			<div class="sticky">
-				<Nav />
-			</div>
-			<div class="min-h-navbar relative left-48 mr-48 flex h-full w-full">
-				<div class="transition-container flex-1 p-4">
+<div class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+	{#if isLogin}
+		{@render children?.()}
+	{:else}
+		<Header />
+		<div class="flex min-h-[calc(100vh-3.5rem)]">
+			<Nav />
+			<main class="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
+				<div class="mx-auto max-w-7xl">
 					{@render children?.()}
 				</div>
-			</div>
+			</main>
 		</div>
-	</div>
+	{/if}
 </div>
-
-<style>
-	.transition-container {
-		display: grid;
-		grid-template-rows: 1fr;
-		grid-template-columns: 1fr;
-	}
-
-	.transition-container > :global(*) {
-		grid-row: 1;
-		grid-column: 1;
-	}
-</style>
