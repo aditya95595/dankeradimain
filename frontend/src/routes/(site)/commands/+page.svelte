@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { cfg } from "$lib/state.svelte";
-	import { Slider } from "$lib/components/ui/slider";
 
 	const enumValues: Record<string, string[]> = {
 		adventureOption: ["brazil", "space", "vacation", "west"],
