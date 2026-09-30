@@ -85,7 +85,7 @@
 					{#each Object.entries(cmd) as [key, value] (key)}
 						{#if key !== "state" && key !== "fishOnlyDelay"}
 							<div class="space-y-1.5 {Array.isArray(value) ? "sm:col-span-2" : ""}">
-								<label class="text-xs text-slate-500">{label(key)}</label>
+								<span class="text-xs text-slate-500">{label(key)}</span>
 								{#if typeof value === "boolean"}
 									<button class="block rounded-lg border border-slate-700 px-3 py-2 text-xs {value ? "border-indigo-500/50 bg-indigo-500/10 text-indigo-300" : "text-slate-400"}" onclick={() => (cmd[key] = !value)}>{value ? "On" : "Off"}</button>
 								{:else if typeof value === "number"}
@@ -102,7 +102,7 @@
 							</div>
 						{:else if key === "fishOnlyDelay"}
 							<div class="sm:col-span-2">
-								<label class="text-xs text-slate-500">Fish-only delay</label>
+								<span class="text-xs text-slate-500">Fish-only delay</span>
 								<div class="grid grid-cols-2 gap-2"><input class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" step="0.1" min="0" max="20" bind:value={cmd.fishOnlyDelay.minSeconds} /><input class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" step="0.1" min="0" max="20" bind:value={cmd.fishOnlyDelay.maxSeconds} /></div>
 							</div>
 						{/if}
