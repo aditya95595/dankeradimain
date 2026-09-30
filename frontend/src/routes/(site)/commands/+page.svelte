@@ -81,7 +81,7 @@
 						{:else if key === "fishOnlyDelay"}
 							<div class="sm:col-span-2">
 								<label class="text-xs text-slate-500">Fish-only delay</label>
-								<Slider type="multiple" bind:value={[cmd.fishOnlyDelay.minSeconds, cmd.fishOnlyDelay.maxSeconds]} max={20} min={0} step={0.1} />
+								<div class="grid grid-cols-2 gap-2"><input class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" step="0.1" min="0" max="20" bind:value={cmd.fishOnlyDelay.minSeconds} /><input class="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" step="0.1" min="0" max="20" bind:value={cmd.fishOnlyDelay.maxSeconds} /></div>
 							</div>
 						{/if}
 					{/each}
