@@ -3,11 +3,13 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
-	"embed"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -24,8 +26,29 @@ var dashboardAuth = struct {
 	sessions map[string]time.Time
 }{sessions: make(map[string]time.Time)}
 
+// loginAttempts tracks recent failed dashboard logins per client IP so
+// brute-force attacks are throttled instead of running unopposed.
+var loginAttempts = struct {
+	sync.Mutex
+	hits map[string][]time.Time
+}{hits: make(map[string][]time.Time)}
+
+const (
+	// loginMaxAttempts is the number of failed logins allowed per
+	// loginWindow for a single client IP before further attempts are
+	// rejected outright.
+	loginMaxAttempts = 5
+	loginWindow      = time.Minute
+	// loginFailDelay is slept after every failed login so automated
+	// guessing runs slowly even below the rate limit.
+	loginFailDelay = 750 * time.Millisecond
+	// sessionLifetime bounds how long one dashboard login stays valid.
+	sessionLifetime = 24 * time.Hour
+)
+
 func startWebServer(dmgService *DmgService, assets embed.FS) {
 	initDashboardAuth()
+	go sweepExpiredSessions()
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/login", loginHandler)
@@ -85,11 +108,11 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			return
 		}
 		var body struct {
-			AccountIndex int `json:"accountIndex"`
-			ReadyState string `json:"readyState"`
+			AccountIndex    int    `json:"accountIndex"`
+			ReadyState      string `json:"readyState"`
 			BreakUpdateTime string `json:"breakUpdateTime"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -128,8 +151,10 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			return
 		}
 		if len(parts) == 1 && r.Method == http.MethodDelete {
-			var body struct { Restarting bool `json:"restarting"` }
-			_ = json.NewDecoder(r.Body).Decode(&body)
+			var body struct {
+				Restarting bool `json:"restarting"`
+			}
+			_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body)
 			dmgService.RemoveInstance(token, body.Restarting)
 			writeJSON(w, map[string]bool{"success": true})
 			return
@@ -147,7 +172,7 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			return
 		}
 		var account config.AccountsConfig
-		if err := json.NewDecoder(r.Body).Decode(&account); err != nil ||
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&account); err != nil ||
 			strings.TrimSpace(account.Token) == "" || strings.TrimSpace(account.ChannelID) == "" {
 			http.Error(w, "token and channelID are required", http.StatusBadRequest)
 			return
@@ -168,8 +193,10 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var body struct { Status types.OnlineStatus `json:"status"` }
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		var body struct {
+			Status types.OnlineStatus `json:"status"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -212,9 +239,80 @@ func startWebServer(dmgService *DmgService, assets embed.FS) {
 	}
 	addr := "0.0.0.0:" + port
 	slog.Info("Web dashboard running", "url", "http://"+addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, securityHeaders(mux)); err != nil {
 		slog.Error("Web server error", "error", err)
 	}
+}
+
+// securityHeaders applies baseline hardening headers to every response.
+// The dashboard is a control panel: it must never be framed, must never be
+// MIME-sniffed, and must not leak its URL as a referrer.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// sweepExpiredSessions periodically purges expired dashboard sessions so
+// they do not accumulate in memory over long uptimes.
+func sweepExpiredSessions() {
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		dashboardAuth.Lock()
+		for token, expiry := range dashboardAuth.sessions {
+			if now.After(expiry) {
+				delete(dashboardAuth.sessions, token)
+			}
+		}
+		dashboardAuth.Unlock()
+	}
+}
+
+// clientIP returns the best-effort client IP, preferring X-Forwarded-For
+// (set by hosting proxies) over the direct remote address.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.Index(xff, ","); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// loginAllowed reports whether this client IP may attempt a login right
+// now, pruning attempts that fell outside the window.
+func loginAllowed(ip string) bool {
+	now := time.Now()
+	loginAttempts.Lock()
+	defer loginAttempts.Unlock()
+	hits := loginAttempts.hits[ip]
+	fresh := hits[:0]
+	for _, t := range hits {
+		if now.Sub(t) < loginWindow {
+			fresh = append(fresh, t)
+		}
+	}
+	loginAttempts.hits[ip] = fresh
+	return len(fresh) < loginMaxAttempts
+}
+
+func recordLoginFailure(ip string) {
+	loginAttempts.Lock()
+	loginAttempts.hits[ip] = append(loginAttempts.hits[ip], time.Now())
+	loginAttempts.Unlock()
 }
 
 func initDashboardAuth() {
@@ -226,7 +324,9 @@ func initDashboardAuth() {
 		} else {
 			password = hex.EncodeToString(buf)
 		}
-		slog.Warn("DASHBOARD_PASSWORD is not set; a temporary dashboard password was generated. Set DASHBOARD_PASSWORD in Wispbyte secrets.")
+		// Fail closed: the random password is never displayed, so the
+		// dashboard cannot be logged into until DASHBOARD_PASSWORD is set.
+		slog.Warn("DASHBOARD_PASSWORD is not set; dashboard login is DISABLED until you set it as a secret on your host.")
 	}
 	dashboardAuth.Lock()
 	dashboardAuth.password = password
@@ -238,15 +338,28 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var body struct { Password string `json:"password"` }
+	ip := clientIP(r)
+	if !loginAllowed(ip) {
+		slog.Warn("dashboard login rate limit exceeded", "ip", ip)
+		http.Error(w, "too many attempts, try again later", http.StatusTooManyRequests)
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 	dashboardAuth.RLock()
-	ok := body.Password != "" && body.Password == dashboardAuth.password
+	password := dashboardAuth.password
 	dashboardAuth.RUnlock()
+	// Constant-time compare: response time must not leak password bytes.
+	ok := body.Password != "" && subtle.ConstantTimeCompare([]byte(body.Password), []byte(password)) == 1
 	if !ok {
+		recordLoginFailure(ip)
+		slog.Warn("failed dashboard login", "ip", ip)
+		time.Sleep(loginFailDelay)
 		http.Error(w, "invalid password", http.StatusUnauthorized)
 		return
 	}
@@ -257,11 +370,13 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	token := hex.EncodeToString(buf)
 	dashboardAuth.Lock()
-	dashboardAuth.sessions[token] = time.Now().Add(24 * time.Hour)
+	dashboardAuth.sessions[token] = time.Now().Add(sessionLifetime)
 	dashboardAuth.Unlock()
+	// Secure requires HTTPS; the dashboard must be served over TLS or the
+	// browser will refuse to store/send this cookie and login will fail.
 	http.SetCookie(w, &http.Cookie{
 		Name: "dmg_session", Value: token, Path: "/", HttpOnly: true,
-		Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: 86400,
+		Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: int(sessionLifetime.Seconds()),
 	})
 	writeJSON(w, map[string]bool{"success": true})
 }
